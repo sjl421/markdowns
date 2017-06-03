@@ -24,7 +24,7 @@ alter table tbnme drop colname;
 4. 添加外键约束
 
 ```sql
-alter table favorite_food add constraint fk_fav_food_person_id foreign key (person_id) references person(person_id);
+alter table favorite_food add constraint fk_fav_food_person_id foreign key (person_id) references person(person_id);		
 ```
 
 其中 fk_fav_food_person_id  为外间约束名称；
@@ -37,5 +37,11 @@ alter table favorite_food add constraint fk_fav_food_person_id foreign key (pers
 
 ```sql
 alter table favorite_food drop foreign key 外键约束名称；
+```
+
+6. 添加主键
+
+```sql
+alter table tbname add primary key （colname);
 ```
 

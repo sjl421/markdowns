@@ -111,3 +111,26 @@ MariaDB [sun_test]> select distinct person_id from favorite_food;
 
 ### From 子语句
 
+1. 使用子查询获取临时表，然后再从临时表中查询；
+
+```sql
+select e.emp_id, e.fname, e.lname from (select emp_id, fname, lname, start_date from employee) e;
+```
+
+### 使用视图
+
+```sql
+create view employee_vw as select emp_id, fname, lname from employee;
+
+mysql> select emp_id, fname, lname from employee_vw;
++--------+-------+----------+
+| emp_id | fname | lname    |
++--------+-------+----------+
+|      1 | sun   | jian     |
+|      2 | lin   | bingqian |
++--------+-------+----------+
+2 rows in set (0.00 sec)
+```
+
+当视图被创建出来后，并没有产生或存储任何数据，服务器只是简单的保留该查询以供后续使用
+
