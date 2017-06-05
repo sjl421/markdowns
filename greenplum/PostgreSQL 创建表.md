@@ -84,3 +84,16 @@ testdb-# \d company
 Indexes:
     "company_pkey" PRIMARY KEY, btree (id) 
 ```
+创建自增字段
+
+mysql 中使用  auto_increment 来表示某个字段是自增的；
+
+postgres 使用 serial 来表示某个字段是自增的
+
+```sql
+create table info (
+id serial not null,
+name varchar(32)
+);
+```
+
