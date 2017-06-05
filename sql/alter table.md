@@ -3,7 +3,7 @@
 1. 修改表中的一个字段
 
 ```sql
-# 可以使用modiify 和 change，
+# 可以使用modify 和 change，
 # 使用change 需要输入两个字段名，意思是将第一个字段的信息修改为第二个字段的（也可以为来理解为删除第一个字段，然后再添加一个新的字段），如果两个字段名是相同的，则相当于 修改 的作用；
 1. alter table tbname modify colname xxx xxx xxx；
 2. alter table tbname change colname colname xxx xxx xxx;
