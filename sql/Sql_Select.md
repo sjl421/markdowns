@@ -133,4 +133,3 @@ mysql> select emp_id, fname, lname from employee_vw;
 ```
 
 当视图被创建出来后，并没有产生或存储任何数据，服务器只是简单的保留该查询以供后续使用
-
