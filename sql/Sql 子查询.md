@@ -305,3 +305,147 @@ group by groups.name;
 3 rows in set (0.00 sec)
 ```
 
+### 面向任务的子查询
+
+```sq
+select p.name product, b.name branch,
+  concat(e.fname, ' ', e.lname) name,
+  sum(a.avail_balance) tot_deposits
+from account a inner join employee e
+  on a.open_emp_id = e.emp_id
+  inner join branch b
+  on a.open_branch_id = b.branch_id
+  inner join product p
+  on a.product_cd = p.product_cd
+where p.product_type_cd = 'ACCOUNT'
+group by p.name, b.name, e.fname, e.lname
+order by 1, 2;
++------------------------+---------------+-----------------+--------------+
+| product                | branch        | name            | tot_deposits |
++------------------------+---------------+-----------------+--------------+
+| certificate of deposit | Headquarters  | Michael Smith   |     11500.00 |
+| certificate of deposit | Woburn Branch | Paula Roberts   |      8000.00 |
+| checking account       | Headquarters  | Michael Smith   |       782.16 |
+| checking account       | Quincy Branch | John Blake      |      1057.75 |
+| checking account       | So. NH Branch | Theresa Markham |     67852.33 |
+| checking account       | Woburn Branch | Paula Roberts   |      3315.77 |
+| money market account   | Headquarters  | Michael Smith   |     14832.64 |
+| money market account   | Quincy Branch | John Blake      |      2212.50 |
+| savings account        | Headquarters  | Michael Smith   |       767.77 |
+| savings account        | So. NH Branch | Theresa Markham |       387.99 |
+| savings account        | Woburn Branch | Paula Roberts   |       700.00 |
++------------------------+---------------+-----------------+--------------+
+11 rows in set (0.04 sec)
+```
+
+2. ​
+
+```sql
+select product_cd, open_branch_id branch_id, open_emp_id emp_id, sum(avail_balance) tot_deposits
+from account
+group by product_cd, open_branch_id, open_emp_id;
++------------+-----------+--------+--------------+
+| product_cd | branch_id | emp_id | tot_deposits |
++------------+-----------+--------+--------------+
+| BUS        |         2 |     10 |      9345.55 |
+| BUS        |         4 |     16 |         0.00 |
+| CD         |         1 |      1 |     11500.00 |
+| CD         |         2 |     10 |      8000.00 |
+| CHK        |         1 |      1 |       782.16 |
+| CHK        |         2 |     10 |      3315.77 |
+| CHK        |         3 |     13 |      1057.75 |
+| CHK        |         4 |     16 |     67852.33 |
+| MM         |         1 |      1 |     14832.64 |
+| MM         |         3 |     13 |      2212.50 |
+| SAV        |         1 |      1 |       767.77 |
+| SAV        |         2 |     10 |       700.00 |
+| SAV        |         4 |     16 |       387.99 |
+| SBL        |         3 |     13 |     50000.00 |
++------------+-----------+--------+--------------+
+14 rows in set (0.00 sec)
+```
+
+3. ​
+
+```sql
+select p.name product, b.name branch, concat(e.fname, ' ', e.lname) name, account_groups.tot_deposits
+from 
+  (select product_cd, open_branch_id branch_id, open_emp_id emp_id, sum(avail_balance) tot_deposits
+   from account
+   group by product_cd, open_branch_id, open_emp_id) account_groups
+   inner join employee e on e.emp_id = account_groups.emp_id
+   inner join branch b on b.branch_id = account_groups.branch_id
+   inner join product p on p.product_cd = account_groups.product_cd
+where p.product_type_cd = 'ACCOUNT';
++------------------------+---------------+-----------------+--------------+
+| product                | branch        | name            | tot_deposits |
++------------------------+---------------+-----------------+--------------+
+| certificate of deposit | Headquarters  | Michael Smith   |     11500.00 |
+| checking account       | Headquarters  | Michael Smith   |       782.16 |
+| money market account   | Headquarters  | Michael Smith   |     14832.64 |
+| savings account        | Headquarters  | Michael Smith   |       767.77 |
+| certificate of deposit | Woburn Branch | Paula Roberts   |      8000.00 |
+| checking account       | Woburn Branch | Paula Roberts   |      3315.77 |
+| savings account        | Woburn Branch | Paula Roberts   |       700.00 |
+| checking account       | Quincy Branch | John Blake      |      1057.75 |
+| money market account   | Quincy Branch | John Blake      |      2212.50 |
+| checking account       | So. NH Branch | Theresa Markham |     67852.33 |
+| savings account        | So. NH Branch | Theresa Markham |       387.99 |
++------------------------+---------------+-----------------+--------------+
+11 rows in set (0.00 sec)
+```
+
+> 话说第三个版本的执行起来更快，分组实现不是基于可能很长的字符串类型（branch.name, product.name, employee.fname, employee.lname), 而是基于更小而数字型的外键列(product_cd, open_branch_id, opem_emp_id).
+
+### 过滤条件中的子查询
+
+```sql
+select open_emp_id, count(*) how_many
+from account
+group by open_emp_id
+having count(*) = (select max(emp_cnt.how_many)
+  from (select count(*) how_many
+    from account group by open_emp_id) emp_cnt);  
++-------------+----------+
+| open_emp_id | how_many |
++-------------+----------+
+|           1 |        8 |
++-------------+----------+
+1 row in set (0.01 sec)
+```
+
+### 子查询作为表达式生成器
+
+```sql
+select 
+(select p.name from product p
+  where p.product_cd = a.product_cd and p.product_type_cd = 'ACCOUNT') product,
+(select b.name from branch b
+  where b.branch_id = a.open_branch_id) branch,
+(select concat(e.fname, ' ', e.lname) from employee e
+  where e.emp_id = a.open_emp_id) name,
+sum(a.avail_balance) tot_deposits
+from account a
+group by a.product_cd, a.open_branch_id, a.open_emp_id
+order by 1,2;
++------------------------+---------------+-----------------+--------------+
+| product                | branch        | name            | tot_deposits |
++------------------------+---------------+-----------------+--------------+
+| NULL                   | Quincy Branch | John Blake      |     50000.00 |
+| NULL                   | So. NH Branch | Theresa Markham |         0.00 |
+| NULL                   | Woburn Branch | Paula Roberts   |      9345.55 |
+| certificate of deposit | Headquarters  | Michael Smith   |     11500.00 |
+| certificate of deposit | Woburn Branch | Paula Roberts   |      8000.00 |
+| checking account       | Headquarters  | Michael Smith   |       782.16 |
+| checking account       | Quincy Branch | John Blake      |      1057.75 |
+| checking account       | So. NH Branch | Theresa Markham |     67852.33 |
+| checking account       | Woburn Branch | Paula Roberts   |      3315.77 |
+| money market account   | Headquarters  | Michael Smith   |     14832.64 |
+| money market account   | Quincy Branch | John Blake      |      2212.50 |
+| savings account        | Headquarters  | Michael Smith   |       767.77 |
+| savings account        | So. NH Branch | Theresa Markham |       387.99 |
+| savings account        | Woburn Branch | Paula Roberts   |       700.00 |
++------------------------+---------------+-----------------+--------------+
+14 rows in set (0.00 sec)
+```
+
