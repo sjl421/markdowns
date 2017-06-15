@@ -273,3 +273,168 @@ where (a.avail_balance, a.pending_balance) <>
 21 rows in set (0.00 sec)
 ```
 
+3.  存在性检查
+
+```sql
+select c.cust_id, c.fed_id, c.cust_type_cd,
+  case
+    when exists (
+      select 1 from account a 
+      where a.cust_id = c.cust_id and a.product_cd = 'CHK')
+    then 'Y'
+    else 'N'
+  end has_checking,
+  case
+    when exists(
+      select 1 from account a 
+      where a.cust_id = c.cust_id and a.product_cd = 'SAV')
+    then 'Y'
+    else 'N'
+  end has_saving
+from customer c;
++---------+-------------+--------------+--------------+------------+
+| cust_id | fed_id      | cust_type_cd | has_checking | has_saving |
++---------+-------------+--------------+--------------+------------+
+|       1 | 111-11-1111 | I            | Y            | Y          |
+|       2 | 222-22-2222 | I            | Y            | Y          |
+|       3 | 333-33-3333 | I            | Y            | N          |
+|       4 | 444-44-4444 | I            | Y            | Y          |
+|       5 | 555-55-5555 | I            | Y            | N          |
+|       6 | 666-66-6666 | I            | Y            | N          |
+|       7 | 777-77-7777 | I            | N            | N          |
+|       8 | 888-88-8888 | I            | Y            | Y          |
+|       9 | 999-99-9999 | I            | Y            | N          |
+|      10 | 04-1111111  | B            | Y            | N          |
+|      11 | 04-2222222  | B            | N            | N          |
+|      12 | 04-3333333  | B            | Y            | N          |
+|      13 | 04-4444444  | B            | N            | N          |
++---------+-------------+--------------+--------------+------------+
+13 rows in set (0.00 sec)
+```
+
+```sql
+select c.cust_id, c.fed_id, c.cust_type_cd, 
+  case (
+    select count(*) from account a
+    where a.cust_id = c.cust_id)
+  when 0 then 'None'
+  when 1 then '1'
+  when 2 then '2'
+  else '3+'
+  end num_accounts
+from customer c;  
+
++---------+-------------+--------------+--------------+
+| cust_id | fed_id      | cust_type_cd | num_accounts |
++---------+-------------+--------------+--------------+
+|       1 | 111-11-1111 | I            | 3+           |
+|       2 | 222-22-2222 | I            | 2            |
+|       3 | 333-33-3333 | I            | 2            |
+|       4 | 444-44-4444 | I            | 3+           |
+|       5 | 555-55-5555 | I            | 1            |
+|       6 | 666-66-6666 | I            | 2            |
+|       7 | 777-77-7777 | I            | 1            |
+|       8 | 888-88-8888 | I            | 2            |
+|       9 | 999-99-9999 | I            | 3+           |
+|      10 | 04-1111111  | B            | 2            |
+|      11 | 04-2222222  | B            | 1            |
+|      12 | 04-3333333  | B            | 1            |
+|      13 | 04-4444444  | B            | 1            |
++---------+-------------+--------------+--------------+
+13 rows in set (0.00 sec)
+```
+
+除0错误
+
+在mysql中做除法运算,如果分母为0, mysql 的返回结果为NULL
+
+```sql
+MariaDB [lsql]> select 100 / 0;
++---------+
+| 100 / 0 |
++---------+
+|    NULL |
++---------+
+1 row in set (0.00 sec)
+```
+
+为了避免这种情况的发生,最好是将分母放到case语句中做判断;
+
+```sql
+select a.cust_id, a.product_cd, a.avail_balance / 
+  case
+    when prod_tots.tot_balance = 0 then 1
+    else prod_tots.tot_balance
+  end precent_of_tatal
+from account a inner join 
+  (select a.product_cd, sum(a.avail_balance) tot_balance
+    from account a 
+    group by a.product_cd) prod_tots
+    on a.product_cd = prod_tots.product_cd;
++---------+------------+------------------+
+| cust_id | product_cd | precent_of_tatal |
++---------+------------+------------------+
+|       1 | CHK        |         0.014488 |
+|       1 | SAV        |         0.269431 |
+|       1 | CD         |         0.153846 |
+|       2 | CHK        |         0.030928 |
+|       2 | SAV        |         0.107773 |
+|       3 | CHK        |         0.014488 |
+|       3 | MM         |         0.129802 |
+|       4 | CHK        |         0.007316 |
+|       4 | SAV        |         0.413723 |
+|       4 | MM         |         0.321915 |
+|       5 | CHK        |         0.030654 |
+|       6 | CHK        |         0.001676 |
+|       6 | CD         |         0.512821 |
+|       7 | CD         |         0.256410 |
+|       8 | CHK        |         0.047764 |
+|       8 | SAV        |         0.209073 |
+|       9 | CHK        |         0.001721 |
+|       9 | MM         |         0.548282 |
+|       9 | CD         |         0.076923 |
+|      10 | CHK        |         0.322911 |
+|      10 | BUS        |         0.000000 |
+|      11 | BUS        |         1.000000 |
+|      12 | CHK        |         0.528052 |
+|      13 | SBL        |         1.000000 |
++---------+------------+------------------+
+24 rows in set (0.00 sec)
+```
+
+有条件的更新
+
+```sql
+update account set
+  last_activity_date = CURRENT_TIMESTAMP(),
+  pending_balance = pending_balance + 
+    (select t.amount * 
+      case t.txn_type_cd when 'DBT' then -1 else 1 end
+     from transaction t
+     where t.txn_id = 999),
+   avail_balance = avail_balance + 
+     (select 
+       case
+         when t.funds_avail_date > current_timestamp() then 0
+         else t.amount * 
+           case t.txn_type_cd when 'DBT' then -1 else 1 end
+       end
+      from transaction t
+      where t.txn_id = 999)
+  where account.account_id =
+    (select t.account_id 
+      from transaction t
+      where t.txn_id = 999);
+```
+
+null 值的处理
+
+```sql
+select emp_id, fname, lname,
+  case
+    when tile is null then 'Unknown'
+    else title
+  end
+from employee
+```
+
