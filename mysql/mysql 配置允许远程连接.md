@@ -90,7 +90,7 @@ selelct user, host, password from user;
 >Authenticating as `'bill'@'%'` through a socket.
 >
 >```
->    root@myhost:/home/mysql-5.5.16-linux2.6-x86_64# ./mysql -ubill -ppass --socket=/tmp/mysql-5.5.sock
+>root@myhost:/home/mysql-5.5.16-linux2.6-x86_64# ./mysql -ubill -ppass --socket=/tmp/mysql-5.5.sock
 >    Welcome to the MySQL monitor (...)
 >
 >    mysql> SELECT user, host FROM mysql.user;
@@ -119,7 +119,6 @@ selelct user, host, password from user;
 >    | skip_networking | ON    |
 >    +-----------------+-------+
 >    1 row in set (0.00 sec)
->
 >```
 >
 >**Edit 2**
