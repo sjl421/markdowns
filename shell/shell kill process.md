@@ -24,8 +24,8 @@ kill -9 `ps -ef|grep "processname" | grep -v "grep"|awk '{print $2}'`
 #!/bin/bash
 pids=$(ps -ef|grep "tomcat" | grep -v "grep" | awk '{print $2}')
 for pid in $pids; do
-  echo "kill tomcat process: " $pid
-  kill -9 $pid
+  echo "kill tomcat process: " $pid;
+  kill -9 $pid;
 done
 ```
 
