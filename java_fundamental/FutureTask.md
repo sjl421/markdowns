@@ -108,6 +108,42 @@ public class myfuturetask {
 }
 ```
 
+创建FutureTask的两种方法：
+
+注意： FutureTask 是一个类，不是接口， 不过FutureTask实现了Runnable接口和Future接口；
+
+1. 实例化一个FutureTask类，然后通过ExecutorService 的submit（）方法来执行该类， 然后就就可以通过该实例调用Future的相关接口来检测该线程的执行状态；
+
+```java
+FutureTask<String> task = new FutureTask<String>(new Callable<String>() {
+    @Override
+    public String call() throws Exception {
+        TimeUnit.MILLISECONDS.sleep(new Random(System.currentTimeMillis()).nextInt(10)*100);
+        System.out.println("Task completed");
+        return "done...";
+    }
+});
+
+ExecutorService exec = Executors.newCachedThreadPool();
+exec.submit(task);
+task.get(500, TimeUnit.MILLISECONDS);
+```
+
+2. 你的task类实现callable接口（实现其中的call()，然后直接ExecutorService的submit方法运行该Task类，submit()方法返回Future<T> ，通过返回的Future 可以调用future相关的方法来获取线程执行的具体情况；
+
+```java
+ExecutorService exec = Executors.newCachedThreadPool();
+Future<String> result = exec.submit(new Task(100, 1000));
+result.get();
+```
+
+3. 类似于二者结合的一种方法：
+
+```java
+FutureTask<String> task = new FutureTask<String>(new Task(i,1000));
+exec.submit(task);
+```
+
 ### 使用Future/FutureTask额外的好处
 
 由于使用Future和FutureTask是可以通过cancell()来中断的，这也是他的优点之一，如果某个线程的执行超出了你允许的时间，则可以主动通过代码来将这个线程终端；
@@ -148,3 +184,11 @@ static final class RunnableAdapter<T> implements Callable<T> {
 }  
 ```
 
+### Future 和FutureTask之间的关系
+
+ FutureTask 是Future的一个实现，Future 可实现 Runnable，所以可通过 threadPool 来执行。例如，可用下列内容替换上面带有 submit 的构造(为简化，返回String类型)；
+
+```java
+public class FutureTask<V> implements RunnableFuture<V> 
+public interface RunnableFuture<V> extends Runnable, Future<V>
+```
