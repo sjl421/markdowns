@@ -67,3 +67,15 @@ keytool -list -keystore "%JAVA_HOME%\jre\lib\security\cacerts" | findstr sso
 **历史巨锅**
 
 在linux环境下，环境变量使用的是$JAVA_HOME, 不知 %JAVA_HOME%，并且linux下路径中文件夹的分隔符是/ ， 而windows下的是\,  别一股脑的乱粘贴复制;
+
+```shell
+keytool -import -keystore "$JAVA_HOME/jre/lib/security/cacerts" -file ssodthink.crt -alias ssodthink
+```
+
+```shell
+keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" | grep sso
+```
+
+```shell
+keytool -delete -keystore "$JAVA_HOME/jre/lib/security/cacerts" -alias ssodthink
+```
