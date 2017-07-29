@@ -1,8 +1,48 @@
 # FutureTask
 
+[TOC]
+
 ### 为什么会有Future和FutureTask类
 
 场景： 在某种场景下主进程需要长时间的计算，此时可以使用FutureTask类来执行这个复杂的计算，然后主进程继续去执行一些其他的操作，然后等主进程处理完自己的操作之后再去通过FutureTask去取计算的结果，如果此时FutureTask类还没有计算完成，则FutureTask的get()会阻塞直到线程执行结束，得到结果；
+
+### Future 和 Callable 接口
+
+java中通过Runnable接口来创建线程的缺点是无法返回结果和抛出受检查的异常, 对与需要返回计算结果和抛出受检查异常的线程来说,可以使用Future和Callable接口来实现:
+
+Callable 和Future接口:
+
+```java
+public interface Callable<V> {
+  V call() throws Exception;
+}
+
+public interface Future<V> {
+  boolean cancel(boolean mayInterruptIfRunning);
+  boolean isCancelled();
+  boolean isDone();
+  V get() throws InterruptedException, ExeccutionException, CancellationException;
+  V get(long timeout, TimeUnit unit) throws InterruptException, ExecutionException,CalcellationException, TimeoutExeception;	//设置超时的get()方法;
+}
+```
+
+然后通过Future<T> ExecutorService.submit(Callable<T> task) 来提交线程;
+
+需要注意的是: 
+
+- get() 方法是可阻塞的, 如果在get()的过程中,线程还没有执行结束,get()方法将会阻塞;
+- 同时Future提供了可以设置超时的get()方法,如果指定时间内没有get到结果,将会抛出一个TimeoutException异常后退出;
+- 如果线程在执行的过程中跑出了异常,会将该异常包装为ExecutionException后重新抛出,此时可以通过getCause() 来获得被封装的初始异常;
+- get()方法的异常处理代码需要处理两个问题: 1. 任务执行的过程中抛出了一个异常; 2. 调用get的线程在获得结果之前被中断;
+
+### Future 和FutureTask之间的关系
+
+ FutureTask 是Future的一个实现，Future 可实现 Runnable，所以可通过 threadPool 来执行。例如，可用下列内容替换上面带有 submit 的构造(为简化，返回String类型)；
+
+```java
+public class FutureTask<V> implements RunnableFuture<V> 
+public interface RunnableFuture<V> extends Runnable, Future<V>
+```
 
 ### 如何使用FutureTask类
 
@@ -144,7 +184,7 @@ FutureTask<String> task = new FutureTask<String>(new Task(i,1000));
 exec.submit(task);
 ```
 
-### 使用Future/FutureTask额外的好处
+### 使用Future/FutureTask额外的好处(对线程生命周期的管理)
 
 由于使用Future和FutureTask是可以通过cancell()来中断的，这也是他的优点之一，如果某个线程的执行超出了你允许的时间，则可以主动通过代码来将这个线程终端；
 
@@ -184,11 +224,3 @@ static final class RunnableAdapter<T> implements Callable<T> {
 }  
 ```
 
-### Future 和FutureTask之间的关系
-
- FutureTask 是Future的一个实现，Future 可实现 Runnable，所以可通过 threadPool 来执行。例如，可用下列内容替换上面带有 submit 的构造(为简化，返回String类型)；
-
-```java
-public class FutureTask<V> implements RunnableFuture<V> 
-public interface RunnableFuture<V> extends Runnable, Future<V>
-```
