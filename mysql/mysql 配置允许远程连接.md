@@ -34,7 +34,7 @@ mysql>select host, user from user;
 如果你想允许用户jack从ip为10.10.50.127的主机连接到mysql服务器，并使用654321作为密码
 
 ```sql
-mysql>GRANT ALL PRIVILEGES ON *.* TO 'jack'@’10.10.50.127’ IDENTIFIED BY '654321' WITH GRANT OPTION;
+mysql>GRANT ALL PRIVILEGES ON *.* TO 'jack'@'10.10.50.127' IDENTIFIED BY '654321' WITH GRANT OPTION;
 mysql>FLUSH PRIVILEGES;		#使刚刚的配置生效，
 ```
 
