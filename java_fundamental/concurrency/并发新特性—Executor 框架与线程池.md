@@ -18,7 +18,7 @@ ExecutorService 的生命周期包括三种状态：运行、关闭、终止。�
 
 >  注意shutdown()和 shutdownnow()方法的区别?
 >
-> 在idea中通过ExecutorService来执行线程的时候,如果最终不显式调用shutdown()方法,那么jvm不会退出;
+>  在idea中通过ExecutorService来执行线程的时候,如果最终不显式调用shutdown()方法,那么jvm不会退出;
 
 Executors 提供了一系列工厂方法用于创先线程池，返回的线程池都实现了 ExecutorService 接口。
 
