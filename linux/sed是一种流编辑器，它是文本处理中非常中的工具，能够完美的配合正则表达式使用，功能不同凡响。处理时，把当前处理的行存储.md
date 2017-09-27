@@ -12,6 +12,5 @@ sed是一种流编辑器，它是文本处理中非常中的工具，能够完�
 将 this is a test line 追加到以test开头的行前面： 
 sed '/^test/i\this is a test line' file 
 在test.conf文件第5行之前插入this is a test line： sed -i '5i\this is a test line' test.conf
-
 ```
 
