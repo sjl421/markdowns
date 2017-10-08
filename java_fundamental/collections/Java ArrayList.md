@@ -36,10 +36,12 @@ private transient Object[] elementData;
 
 ```
 /**
-     * 构造一个初始容量为 10 的空列表
+     * 构造一个初始容量为 10 的空列表，
+     * 在jdk1.7中这里并没有直接对数组申请空间，此时elementData是一个空数组，对该数组的申请空间的操作会是在调用add（）方法的时候调用的，申请的最小的空间是10；
      */
     public ArrayList() {
-        this(10);
+        super();
+        this.elementData = EMPTY_ELEMENTDATA;
     }
 
     /**
@@ -126,27 +128,25 @@ public boolean addAll(Collection<? extends E> c) {
 ​     addAll(int index, Collection<? extends E> c)：从指定的位置开始，将指定 collection 中的所有元素插入到此列表中。
 
 ```
-public boolean addAll(int index, Collection<? extends E> c) {
-        //判断位置是否正确
-        if (index > size || index < 0)
-            throw new IndexOutOfBoundsException("Index: " + index + ", Size: "
-                    + size);
-        //转换成数组
+    public boolean addAll(int index, Collection<? extends E> c) {
+        rangeCheckForAdd(index);
+
         Object[] a = c.toArray();
         int numNew = a.length;
-        //ArrayList容器扩容处理
-        ensureCapacity(size + numNew); // Increments modCount
-        //ArrayList容器数组向右移动的位置
+        ensureCapacityInternal(size + numNew);  // Increments modCount
+
         int numMoved = size - index;
-        //如果移动位置大于0，则将ArrayList容器的数据向右移动numMoved个位置，确保增加的数据能够增加
         if (numMoved > 0)
             System.arraycopy(elementData, index, elementData, index + numNew,
-                    numMoved);
-        //添加数组
+                             numMoved);
+
         System.arraycopy(a, 0, elementData, index, numNew);
-        //容器容量变大
-        size += numNew;   
+        size += numNew;
         return numNew != 0;
+    }
+    private void rangeCheckForAdd(int index) {
+        if (index > size || index < 0)
+            throw new IndexOutOfBoundsException(outOfBoundsMsg(index));
     }
 ```
 
@@ -173,7 +173,7 @@ public E set(int index, E element) {
 ```
 public E remove(int index) {
         //位置验证
-        RangeCheck(index);
+        rangeCheck(index);
 
         modCount++;
         //需要删除的元素
@@ -277,35 +277,70 @@ public E get(int index) {
 ​      在上面的新增方法的源码中我们发现每个方法中都存在这个方法：ensureCapacity()，该方法就是ArrayList的扩容方法。在前面就提过ArrayList每次新增元素时都会需要进行容量检测判断，若新增元素后元素的个数会超过ArrayList的容量，就会进行扩容操作来满足新增元素的需求。所以当我们清楚知道业务数据量或者需要插入大量元素前，我可以使用ensureCapacity来手动增加ArrayList实例的容量，以减少递增式再分配的数量。
 
 ```
-public void ensureCapacity(int minCapacity) {
-        //修改计时器
-        modCount++;
-        //ArrayList容量大小
-        int oldCapacity = elementData.length;
-        /*
-         * 若当前需要的长度大于当前数组的长度时，进行扩容操作
-         */
-        if (minCapacity > oldCapacity) {
-            Object oldData[] = elementData;
-            //计算新的容量大小，为当前容量的1.5倍
-            int newCapacity = (oldCapacity * 3) / 2 + 1;
-            if (newCapacity < minCapacity)
-                newCapacity = minCapacity;
-            //数组拷贝，生成新的数组
-            elementData = Arrays.copyOf(elementData, newCapacity);
+    public void ensureCapacity(int minCapacity) {
+        int minExpand = (elementData != EMPTY_ELEMENTDATA)
+            // any size if real element table
+            ? 0
+            // larger than default for empty table. It's already supposed to be
+            // at default size.
+            : DEFAULT_CAPACITY;
+
+        if (minCapacity > minExpand) {
+            ensureExplicitCapacity(minCapacity);
         }
+    }
+        private void ensureCapacityInternal(int minCapacity) {
+        if (elementData == EMPTY_ELEMENTDATA) {
+            minCapacity = Math.max(DEFAULT_CAPACITY, minCapacity);
+        }
+
+        ensureExplicitCapacity(minCapacity);
+    }
+
+    private void ensureExplicitCapacity(int minCapacity) {
+        modCount++;
+
+        // overflow-conscious code
+        if (minCapacity - elementData.length > 0)
+            grow(minCapacity);
+    }
+    //在jdk1.7中，只保证了扩容的空间能够装下所有元素的最小空间，并没有申请过多的额外的空间；
+    private void grow(int minCapacity) {
+        // overflow-conscious code
+        int oldCapacity = elementData.length;
+        //每次扩容都是扩容当前容量的1.5倍
+        int newCapacity = oldCapacity + (oldCapacity >> 1);
+        if (newCapacity - minCapacity < 0)
+            newCapacity = minCapacity;
+        //对申请的容量可能超过最大容量时的检测
+        if (newCapacity - MAX_ARRAY_SIZE > 0)
+            newCapacity = hugeCapacity(minCapacity);
+        // minCapacity is usually close to size, so this is a win:
+        //调用Arrays.copyOf()方法，会copy原有数组的中的元素，同时又会根据第二个参数来缩短者增加数据的容量，增加的新的元素的默认值是null
+        elementData = Arrays.copyOf(elementData, newCapacity);
+    }
+	//确保能够申请到的最大的容量是Integer.MAX_VALUE大小的容量
+    private static int hugeCapacity(int minCapacity) {
+        if (minCapacity < 0) // overflow
+            throw new OutOfMemoryError();
+          return (minCapacity > MAX_ARRAY_SIZE) ?
+              Integer.MAX_VALUE :
+            MAX_ARRAY_SIZE;
     }
 ```
 
-​      在这里有一个疑问，为什么每次扩容处理会是1.5倍，而不是2.5、3、4倍呢？通过google查找，发现1.5倍的扩容是最好的倍数。因为一次性扩容太大(例如2.5倍)可能会浪费更多的内存(1.5倍最多浪费33%，而2.5被最多会浪费60%，3.5倍则会浪费71%……)。但是一次性扩容太小，需要多次对数组重新分配内存，对性能消耗比较严重。所以1.5倍刚刚好，既能满足性能需求，也不会造成很大的内存消耗。
+> 在jdk1.7中， add（E e）方法中在调用的ensureCapacityInternal(size + 1)， 也就说检查当前arrayList能否装下一个新的元素；
+>
+> 而在其他方法中
+
+在这里有一个疑问，为什么每次扩容处理会是1.5倍，而不是2.5、3、4倍呢？通过google查找，发现1.5倍的扩容是最好的倍数。因为一次性扩容太大(例如2.5倍)可能会浪费更多的内存(1.5倍最多浪费33%，而2.5被最多会浪费60%，3.5倍则会浪费71%……)。但是一次性扩容太小，需要多次对数组重新分配内存，对性能消耗比较严重。所以1.5倍刚刚好，既能满足性能需求，也不会造成很大的内存消耗。
 
 ​      处理这个ensureCapacity()这个扩容数组外，ArrayList还给我们提供了将底层数组的容量调整为当前列表保存的实际元素的大小的功能。它可以通过trimToSize()方法来实现。该方法可以最小化ArrayList实例的存储量。
 
 ```
-public void trimToSize() {
+    public void trimToSize() {
         modCount++;
-        int oldCapacity = elementData.length;
-        if (size < oldCapacity) {
+        if (size < elementData.length) {
             elementData = Arrays.copyOf(elementData, size);
         }
     }
