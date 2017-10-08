@@ -38,27 +38,31 @@ keytool -delete  -alias apiservice -storepass apiservice
 1. 生成keystore
 
 ```
-keytool -genkey -alias apiservice  -keyalg RSA -keysize 1024 -validity 365 -keystore apiservice.keystore -ext san=ip:183.131.17.254 -dname "CN=183.131.17.254, OU=DtDream, O=ADB, L=HangZhou, ST=ZheJiang, C=China" 
+keytool -genkey -alias apiservice  -keyalg RSA -keysize 1024 -validity 3650 -keystore apiservice.keystore -ext san=ip:183.131.17.254 -dname "CN=183.131.17.254, OU=DtDream, O=ADB, L=HangZhou, ST=ZheJiang, C=China"
 # 这个命令中没有设置密码的动作,如果需要设置密码,在生成keystore的过程中直接输入密码, 其中会有两个地方让生成密码,每个地方需要输入两次密码, 注意这两个地方的密码需要是相同的密码,否则tomcat在启动的时候会报错;
 ```
 
 2. 导出证书
 
    ```
-keytool -export -alias apiservice -keystore apiservice.keystore -file apiservice.cer -storepass DtDream@0209
+   keytool -export -alias apiservice -keystore apiservice.keystore -file apiservice.cer -storepass DtDream@0209
    ```
 
 3. 如果需要删除之前keystore:
 
 ```
-keytool -delete  -alias apiservice -keystore keystore-name -storepass apiservice
+keytool -delete  -alias apiservice -keystore apiservice.keystore -storepass apiservice
 ```
 
 ```
 keytool -delete  -alias apiservice -storepass apiservice
 ```
 
-# 
+
+
+
+
+
 
 ## 下面是各选项的缺省值。  ##
 
@@ -95,3 +99,24 @@ keytool -delete  -alias apiservice -storepass apiservice
                maxThreads="150" SSLEnabled="true" scheme="https" secure="true"
                clientAuth="false" sslProtocol="TLS" 
                keystoreFile="证书地址" keystorePass="密钥库口令"/>
+```
+keytool -delete -keystore /usr/lib/jvm/jre/lib/security/cacerts -alias dtcenter.crt -storepass changeit -noprompt
+keytool -import -keystore /usr/lib/jvm/jre/lib/security/cacerts -file /mnt/crt/tomcat.crt -alias dtcenter.crt -storepass changeit -noprompt
+```
+
+---
+
+尝试命令:
+
+```
+keytool -delete -alias apiservice -keystore apiservice.keystore -storepass changeit
+```
+
+```
+keytool -genkey -alias apiservice -keypass changeit -keyalg RSA -keysize 1024 -validity 3650 -keystore /opt/ADBStart/tmp/apiservice.keystore -storepass changeit -ext san=ip:183.131.17.254 -dname  "CN=183.131.17.254, OU=DtDream, O=ADB, L=HangZhou, ST=ZheJiang, C=China"
+```
+
+```
+keytool -export -alias apiservice -keystore apiservice.keystore -file apiservice.cer -storepass changeit
+```
+
