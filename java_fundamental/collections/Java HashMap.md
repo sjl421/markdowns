@@ -199,7 +199,7 @@ public V put(K key, V value) {
 
 ​      2、 在看（1）、（2）处。这里是HashMap的精华所在。首先是hash方法，该方法为一个纯粹的数学计算，就是计算h的hash值.
 
-> 它的目的是让“1”变的均匀一点，散列的本意就是要尽量均匀分布
+> 它的目的是让“1”变的均匀一点，散列的本意就是要尽量均匀分布[参考][https://stackoverflow.com/questions/9335169/understanding-strange-java-hash-function]
 
 ```
 static int hash(int h) {
