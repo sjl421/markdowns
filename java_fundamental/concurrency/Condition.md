@@ -329,3 +329,9 @@ final boolean transferForSignal(Node node) {
 一个线程获取锁后，通过调用Condition的await()方法，会将当前线程先加入到条件队列中，然后释放锁，最后通过isOnSyncQueue(Node node)方法不断自检看节点是否已经在CLH同步队列了，如果是则尝试获取锁，否则一直挂起。当线程调用signal()方法后，程序首先检查当前线程是否获取了锁，然后通过doSignal(Node first)方法唤醒CLH同步队列的首节点。被唤醒的线程，将从await()方法中的while循环中退出来，然后调用acquireQueued()方法竞争同步状态。
 
 其他其中await()的方式都是在await()的基础上稍微加了一些变形得到的；
+
+
+
+参考文献：
+
+1. http://cmsblogs.com/?p=2222
