@@ -42,15 +42,20 @@ kernel.core_uses_pid = 1
 sysctl -p /etc/sysctl.conf
 ```
 
+
+
+设置core dump文件的文件名:
+
 ```
-%c 转储文件的大小上限
-%e 所dump的文件名
-%g 所dump的进程的实际组ID
-%h 主机名
-%p 所dump的进程PID
-%s 导致本次coredump的信号
-%t 转储时刻(由1970年1月1日起计的秒数)
+%% 单个%字符
+%p 所dump进程的进程ID
 %u 所dump进程的实际用户ID
+%g 所dump进程的实际组ID
+%s 导致本次core dump的信号
+%t core dump的时间 (由1970年1月1日计起的秒数)
+%h 主机名
+%e 程序文件名
+%c 转储文件的大小上限
 ```
 
 
@@ -79,8 +84,6 @@ root soft nofile 65534
 root hard nofile 65534
 也就是写成上面那样，重新登录，不需要重启，ulimit -a可以看到文件打开数已经是65534了，这就是limits.conf不生效的原因，注意ubuntu一定不能直接用*
 ```
-
-
 
 ```
 vim /etc/security/limits.conf
