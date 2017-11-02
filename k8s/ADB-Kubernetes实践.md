@@ -17,7 +17,15 @@ TCP  192.168.143.144:5432 wlc persistent 7200
 
 `10.244.0.19:5432` 是租户的内网的
 
-2. Service :tenant3-vip 
+###分析
+
+```
+vip的 pod 是一个keepalived pod
+```
+
+
+
+2. Service :tenant3-vip
 
 ```yaml
 [root@m1 ~]# kubectl get svc  tenant3-vip
@@ -48,8 +56,6 @@ spec:
     tenancy: tenant3
   sessionAffinity: None
   type: ClusterIP
-status:
-  loadBalancer: {}
 ```
 
 3. Pod:tenant3-vip-c5ss6
@@ -139,41 +145,6 @@ spec:
     secret:
       defaultMode: 420
       secretName: default-token-pgs6m
-status:
-  conditions:
-  - lastProbeTime: null
-    lastTransitionTime: 2017-10-27T09:12:09Z
-    status: "True"
-    type: Initialized
-  - lastProbeTime: null
-    lastTransitionTime: 2017-10-27T09:12:13Z
-    status: "True"
-    type: Ready
-  - lastProbeTime: null
-    lastTransitionTime: 2017-10-27T09:12:09Z
-    status: "True"
-    type: PodScheduled
-  containerStatuses:
-  - containerID: docker://6aee7739f7a39561e71aa9a7860320326a3f1170500e582184644806df982e1f
-    image: docker.dtdream.com/dtdream/kube-keepalived-vip:0.9
-    imageID: docker://sha256:199891ffbc45a3ee1a7a27aff1e1dc40b24dc1daa78982946dd6ab0043df6668
-    lastState:
-      terminated:
-        containerID: docker://57f586aa6113a548ac1c0754ebcfeb45de5aa7a2a69ce54c7ce249c7b3cf141c
-        exitCode: 255
-        finishedAt: 2017-10-27T09:12:11Z
-        reason: Error
-        startedAt: 2017-10-27T09:12:10Z
-    name: tenant3-vip
-    ready: true
-    restartCount: 1
-    state:
-      running:
-        startedAt: 2017-10-27T09:12:13Z
-  hostIP: 192.168.143.72
-  phase: Running
-  podIP: 192.168.143.72
-  startTime: 2017-10-27T09:12:09Z
 ```
 
 1. ConfigMap: tenant3-vip-cm
@@ -271,18 +242,11 @@ spec:
       - hostPath:
           path: /dev
         name: dev
-status:
-  availableReplicas: 1
-  fullyLabeledReplicas: 1
-  observedGeneration: 1
-  readyReplicas: 1
-  replicas: 1
 ```
 
 4. Service: tenant3-vip
 
 ```yaml
-[root@m1 ~]# clear
 [root@m1 ~]# kubectl get svc tenant3-vip -o yaml
 apiVersion: v1
 kind: Service
@@ -467,35 +431,6 @@ spec:
     secret:
       defaultMode: 420
       secretName: default-token-pgs6m
-status:
-  conditions:
-  - lastProbeTime: null
-    lastTransitionTime: 2017-10-27T09:12:09Z
-    status: "True"
-    type: Initialized
-  - lastProbeTime: null
-    lastTransitionTime: 2017-10-27T09:12:11Z
-    status: "True"
-    type: Ready
-  - lastProbeTime: null
-    lastTransitionTime: 2017-10-27T09:12:09Z
-    status: "True"
-    type: PodScheduled
-  containerStatuses:
-  - containerID: docker://a3fa625f3a72bb14e3f3f81720ab7148ba84bec6d41ed67ab0ff5d60a59b5d38
-    image: docker.dtdream.com/adb/adb-control:v1.1.0
-    imageID: docker://sha256:9b210acf397473cdc418f57c077871f25d9a81f878a7fb6da889335b21fabc7a
-    lastState: {}
-    name: tenant3-master
-    ready: true
-    restartCount: 0
-    state:
-      running:
-        startedAt: 2017-10-27T09:12:11Z
-  hostIP: 192.168.143.72
-  phase: Running
-  podIP: 10.244.0.19
-  startTime: 2017-10-27T09:12:09Z
 ```
 
 

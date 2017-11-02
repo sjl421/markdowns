@@ -4,6 +4,8 @@
 
 
 
+##SysLoggerMain
+
 stderr管道 重定向
 
 ```
@@ -107,3 +109,42 @@ next_chunkloop:
 
 用来写入具体的日志的
 
+---
+
+调用关系图
+PostmasterMain -> SysLogger_Start ->  fork_process()(创建线程) -> SysLoggerMain(0, NULL) (logger 线程工作的方法);
+
+###SysLoggerMain
+
+1. 设置am_syslogger标志位
+
+   ```
+   //如果syslogger进程,am_syslogger位为true
+   am_syslogger = true;
+   ```
+
+2. 设置进程在linux 系统中的显示信息, 可以用ps -ef 看到;
+
+   ```
+   if (Gp_entry_postmaster && Gp_role == GP_ROLE_DISPATCH)
+   	init_ps_display("master logger process", "", "", "");
+   else
+   	init_ps_display("logger process", "", "", "");
+   ```
+
+3. /* main worker loop */
+
+   ```
+   1. 检查配置文件;
+   2. 检查文件是否需要Rotation;
+   3. 检查工作目录是否正确,如果不正确则创建目录;
+   4.
+   ```
+
+4. ...
+
+   ```
+   syslogger_forkexec() -> postmaster_forkexec() -> internal_forkexec() -> CreateProcess()
+   ```
+
+   ​
