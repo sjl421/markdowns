@@ -149,6 +149,10 @@ CRETIRIA 详解：
      -p：用于匹配协议的（这里的协议通常有3种，TCP/UDP/ICMP）
      -i eth0：从这块网卡流入的数据   （流入一般用在INPUT和PREROUTING上）
      -o eth0：从这块网卡流出的数据  （流出一般在OUTPUT和POSTROUTING上）
+     -i<网络接口>：指定数据包进入本机的网络接口;
+     -o<网络接口>：指定数据包要离开本机所使用的网络接口;
+来自: http://man.linuxde.net/iptables
+
 2.扩展匹配（隐含扩展：对协议的扩展 和显式扩展（-m））
      -p tcp :TCP协议的扩展
        --dport XX-XX：指定目标端口,不能指定多个非连续端口,只能指定单个端口
