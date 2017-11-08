@@ -61,7 +61,7 @@ Linux内核置支持网口的桥接,但是与单纯的交换机不同,交换机�
 
 linux内核支持网口的桥接（目前只支持以太网接口）。但是与单纯的交换机不同，交换机只是一个二层设备，对于接收到的报文，要么转发、要么丢弃。小型 的交换机里面只需要一块交换芯片即可，并不需要CPU。而运行着linux内核的机器本身就是一台主机，有可能就是网络报文的目的地。其收到的报文除了转 发和丢弃，还可能被送到网络协议栈的上层（网络层），从而被自己消化。
 
-linux内核是通过一个虚拟的网桥设备来实现桥接的。这个虚拟设备可以绑定若干个以太网接口设备，从而将它们桥接起来。如下图（摘自ULNI）：
+linux内核是通过一个虚拟的网桥设备来实现桥接的。这个虚拟设备可以绑定若干个以太网接口设备，从而将它们桥接起来。如上图（摘自ULNI）：
 
 参考:http://blog.csdn.net/bailyzheng/article/details/29244963
 
@@ -70,3 +70,17 @@ TODO
 http://blog.csdn.net/u013485792/article/details/51493136
 
 ##veth
+
+中有提到过，每一个VETH网卡都是一对儿以太网卡，除了xmit接口与常规的以太网卡驱动不同之外，其它的几乎就是一块标准的以太网卡。VETH网卡既然是一对儿两个，那么我们把一块称作另一块的peer，标准上也是这么讲的。其xmit的实现就是：将数据发送到其peer，触发其peer的RX。可以把 `veth pair` 当做是双向的 pipe（管道），从一个方向发送的网络数据，可以直接被另外一端接收到；或者也可以想象成两个 namespace 直接通过一个特殊的虚拟网卡连接起来，可以直接通信。
+
+那么问题来了，这些数据如何发送到VETH网卡对儿之外呢？自问必有自答，自答如下：
+
+**1.如果确实需要将数据发到外部，通过将一块VETH网卡和一块普通ETHx网卡进行bridge，通过bridge逻辑将数据forward到ETHx，进而发出；**
+
+**2.难道非要把数据包发往外部吗？类似loopback那样的，不就是自发自收吗？使用VETH可以很方面并且隐秘地将数据包从一个net namespace发送到同一台机器的另一个net namespace，并且不被嗅探到。**
+
+​       VETH虚拟网卡非常之简单，原理图如下所示：
+
+![img](http://img.blog.csdn.net/20150517134821346?watermark/2/text/aHR0cDovL2Jsb2cuY3Nkbi5uZXQvZG9nMjUw/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70/gravity/Center)
+
+参考资料:http://cizixs.com/2017/02/10/network-virtualization-network-namespace
