@@ -95,7 +95,7 @@ adb-apiservice-3048720302-2sjx5   1/1       Running   0          5s        10.24
 **5. 删除Node label**
 
 ```
-#如果Node m2.adb.g1.com 中存在key为role的label则删除
+#如果Node m2.adb.g1.com 中存在key为role的label则删除,在key后面加减号'-'即可
 kubectl label node m2.adb.g1.com role-
 ```
 
