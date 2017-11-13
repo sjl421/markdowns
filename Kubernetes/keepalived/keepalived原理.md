@@ -6,8 +6,6 @@
 
 Keepalived使用的vrrp协议方式，虚拟路由冗余协议 (Virtual Router Redundancy Protocol，简称VRRP), Keepalived的目的是模拟路由器的高可用([文章](http://freeloda.blog.51cto.com/2033581/1280962) 中还提到了服务高可用的概念,用来和这里的路由器高可用做对比理解)
 
-
-
 1. Keepalived 定义
 
 ​       Keepalived 是一个基于VRRP协议来实现的LVS服务高可用方案，可以利用其来避免单点故障。一个LVS服务会有2台服务器运行Keepalived，一台为主服务器（MASTER），一台为备份服务器（BACKUP），但是对外表现为一个虚拟IP，主服务器会发送特定的消息给备份服务器，当备份服务器收不到这个消息的时候，即主服务器宕机的时候， 备份服务器就会接管虚拟IP，继续提供服务，从而保证了高可用性。Keepalived是VRRP的完美实现，因此在介绍keepalived之前，先介绍一下VRRP的原理。
@@ -59,6 +57,360 @@ Keepalived使用的vrrp协议方式，虚拟路由冗余协议 (Virtual Router R
 
 ​       当内部主机通过ARP查询虚拟路由器IP地址对应的MAC地址时，MASTER路由器回复的MAC地址为虚拟的VRRP的MAC地址，而不是实际网卡的 MAC地址，这样在路由器切换时让内网机器觉察不到；而在路由器重新启动时，不能主动发送本机网卡的实际MAC地址。如果虚拟路由器开启的ARP代理 (proxy_arp)功能，代理的ARP回应也回应VRRP虚拟MAC地址；好了VRRP的简单讲解就到这里，我们下来讲解一下Keepalived的案例。
 
----
+
+
+## keepalived + LVS配置
+
+示例1. 
+
+参考地址:http://blog.csdn.net/wngua/article/details/54668794
+
+```
+如果你没有配置LVS+keepalived那么无需配置这段区域，里如果你用的是nginx来代替LVS，这无限配置这款，这里的LVS配置是专门为keepalived+LVS集成准备的。
+注意了，这里LVS配置并不是指真的安装LVS然后用ipvsadm来配置他，而是用keepalived的配置文件来代替ipvsadm来配置LVS，这样会方便很多，一个配置文件搞定这些，维护方便，配置方便是也！
+
+这里LVS配置也有两个配置
+一个是虚拟主机组配置
+一个是虚拟主机配置
+
+1，虚拟主机组配置文件详解
+这个配置是可选的，根据需求来配置吧，这里配置主要是为了让一台realserver上的某个服务可以属于多个Virtual Server，并且只做一次健康检查
+
+virtual_server_group <STRING> {
+# VIP port
+<IPADDR> <PORT>
+<IPADDR> <PORT>
+fwmark <INT>
+}
+
+2，虚拟主机配置
+
+virtual server可以以下面三种的任意一种来配置
+1. virtual server IP port
+2. virtual server fwmark int
+3. virtual server group string
+复制代码
+下面以第一种比较常用的方式来配详细解说一下
+
+virtual_server 192.168.1.2 80 {                     #设置一个virtual server: VIP:Vport
+delay_loop 3                                                  # service polling的delay时间，即服务轮询的时间间隔
+
+lb_algo rr|wrr|lc|wlc|lblc|sh|dh                        #LVS调度算法
+lb_kind NAT|DR|TUN                                      #LVS集群模式                      
+persistence_timeout 120                                #会话保持时间（秒为单位），即以用户在120秒内被分配到同一个后端realserver
+persistence_granularity <NETMASK>              #LVS会话保持粒度，ipvsadm中的-M参数，默认是0xffffffff，即每个客户端都做会话保持
+protocol TCP                                                  #健康检查用的是TCP还是UDP
+ha_suspend                                                   #suspendhealthchecker’s activity
+virtualhost <string>                                       #HTTP_GET做健康检查时，检查的web服务器的虚拟主机（即host：头）
+
+sorry_server <IPADDR> <PORT>                 #备用机，就是当所有后端realserver节点都不可用时，就用这里设置的，也就是临时把所有的请求都发送到这里啦
+
+real_server <IPADDR> <PORT>                    #后端真实节点主机的权重等设置，主要，后端有几台这里就要设置几个
+{
+weight 1                                                         #给每台的权重，0表示失效(不知给他转发请求知道他恢复正常)，默认是1
+inhibit_on_failure                                            #表示在节点失败后，把他权重设置成0，而不是冲IPVS中删除
+
+notify_up <STRING> | <QUOTED-STRING>  #检查服务器正常(UP)后，要执行的脚本
+notify_down <STRING> | <QUOTED-STRING> #检查服务器失败(down)后，要执行的脚本
+
+HTTP_GET                                                     #健康检查方式
+{
+url {                                                                #要坚持的URL，可以有多个
+path /                                                             #具体路径
+digest <STRING>                                            
+status_code 200                                            #返回状态码
+}
+connect_port 80                                            #监控检查的端口
+
+bindto <IPADD>                                             #健康检查的IP地址
+connect_timeout   3                                       #连接超时时间
+nb_get_retry 3                                               #重连次数
+delay_before_retry 2                                      #重连间隔
+} # END OF HTTP_GET|SSL_GET
+
+
+#下面是常用的健康检查方式，健康检查方式一共有HTTP_GET|SSL_GET|TCP_CHECK|SMTP_CHECK|MISC_CHECK这些
+#TCP方式
+TCP_CHECK {
+connect_port 80
+bindto 192.168.1.1
+connect_timeout 4
+} # TCP_CHECK
+
+# SMTP方式，这个可以用来给邮件服务器做集群
+SMTP_CHECK
+host {
+connect_ip <IP ADDRESS>
+connect_port <PORT>                                     #默认检查25端口
+14 KEEPALIVED
+bindto <IP ADDRESS>
+}
+connect_timeout <INTEGER>
+retry <INTEGER>
+delay_before_retry <INTEGER>
+# "smtp HELO"ž|·-ëê§Œà"
+helo_name <STRING>|<QUOTED-STRING>
+} #SMTP_CHECK
+
+#MISC方式，这个可以用来检查很多服务器只需要自己会些脚本即可
+MISC_CHECK
+{
+misc_path <STRING>|<QUOTED-STRING> #外部程序或脚本
+misc_timeout <INT>                                    #脚本或程序执行超时时间
+
+misc_dynamic                                               #这个就很好用了，可以非常精确的来调整权重，是后端每天服务器的压力都能均衡调配，这个主要是通过执行的程序或脚本返回的状态代码来动态调整weight值，使权重根据真实的后端压力来适当调整，不过这需要有过硬的脚本功夫才行哦
+#返回0：健康检查没问题，不修改权重
+#返回1：健康检查失败，权重设置为0
+#返回2-255：健康检查没问题，但是权重却要根据返回代码修改为返回码-2，例如如果程序或脚本执行后返回的代码为200，#那么权重这回被修改为 200-2
+}
+} # Realserver
+} # Virtual Server
+
+配置文件到此就讲完了，下面是一份未加备注的完整配置文件
+global_defs
+{
+notification_email
+{
+admin@example.com
+}
+notification_email_from admin@example.com
+smtp_server 127.0.0.1
+stmp_connect_timeout 30
+router_id node1
+}
+notification_email
+{
+admin@example.com
+admin@ywlm.net
+}
+
+static_ipaddress
+{
+192.168.1.1/24 brd + dev eth0 scope global
+192.168.1.2/24 brd + dev eth1 scope global
+}
+static_routes
+{
+src $SRC_IP to $DST_IP dev $SRC_DEVICE
+src $SRC_IP to $DST_IP via $GW dev $SRC_DEVICE
+}
+
+vrrp_sync_group VG_1 {
+group {
+http
+mysql
+}
+notify_master /path/to/to_master.sh
+notify_backup /path_to/to_backup.sh
+notify_fault "/path/fault.sh VG_1"
+notify /path/to/notify.sh
+smtp_alert
+}
+group {
+http
+mysql
+}
+
+
+vrrp_script check_running {
+   script "/usr/local/bin/check_running"
+   interval 10
+   weight 10
+}
+
+
+vrrp_instance http {
+state MASTER
+interface eth0
+dont_track_primary
+track_interface {
+eth0
+eth1
+}
+mcast_src_ip <IPADDR>
+garp_master_delay 10
+virtual_router_id 51
+priority 100
+advert_int 1
+authentication {
+auth_type PASS
+autp_pass 1234
+}
+virtual_ipaddress {
+#<IPADDR>/<MASK> brd <IPADDR> dev <STRING> scope <SCOPT> label <LABEL>
+192.168.200.17/24 dev eth1
+192.168.200.18/24 dev eth2 label eth2:1
+}
+virtual_routes {
+# src <IPADDR> [to] <IPADDR>/<MASK> via|gw <IPADDR> dev <STRING> scope <SCOPE> tab
+src 192.168.100.1 to 192.168.109.0/24 via 192.168.200.254 dev eth1
+192.168.110.0/24 via 192.168.200.254 dev eth1
+192.168.111.0/24 dev eth2
+192.168.112.0/24 via 192.168.100.254
+}
+track_script {
+check_running weight 20
+}
+
+nopreempt
+preemtp_delay 300
+debug
+}
+
+virtual_server_group <STRING> {
+# VIP port
+< IPADDR> <PORT>
+< IPADDR> <PORT>
+fwmark <INT>
+}
+
+virtual_server 192.168.1.2 80 {
+delay_loop 3
+
+lb_algo rr|wrr|lc|wlc|lblc|sh|dh
+lb_kind NAT|DR|TUN
+persistence_timeout 120
+persistence_granularity <NETMASK>
+protocol TCP
+ha_suspend
+virtualhost <string>
+
+sorry_server <IPADDR> <PORT>
+
+real_server <IPADDR> <PORT>
+{
+weight 1
+inhibit_on_failure 
+notify_up <STRING> | <QUOTED-STRING>
+notify_down <STRING> | <QUOTED-STRING>
+
+#HTTP_GET方式
+HTTP_GET | SSL_GET
+{
+url { 
+path / 
+digest <STRING>                                            
+status_code 200
+}
+connect_port 80 
+
+bindto <IPADD>
+connect_timeout   3
+nb_get_retry 3
+delay_before_retry 2
+} 
+}
+}
+```
+
+示例2:
+
+参考地址:http://www.linuxidc.com/Linux/2013-07/86889.htm
+
+```
+下面是keepalived详细配置文件解析：
+
+[root@localhost kernels]# cat /etc/keepalived/keepalived.conf 
+! Configuration File for keepalived 
+global_defs { 
+#  notification_email { 
+#    acassen@firewall.loc 
+#    failover@firewall.loc 
+#    sysadmin@firewall.loc 
+#  } 
+#  notification_email_from Alexandre.Cassen@firewall.loc 
+#  smtp_server 192.168.200.1
+#  smtp_connect_timeout 30
+router_id LVS_DEVEL    //负载均衡器标识，同一网段内，可以相同 
+} 
+vrrp_sync_group VGM {  //定义一个vrrp组 
+  group { 
+  	VI_1 
+  } 
+} 
+vrrp_instance VI_1 {    //定义vrrp实例 
+state MASTER        //主LVS是MASTER,从的BACKUP 
+interface eth0      //LVS监控的网络接口 
+virtual_router_id 51  //同一实例下virtual_router_id必须相同 
+priority 100            //定义优先级，数字越大，优先级越高 
+advert_int 5          //MASTER与BACKUP负载均衡器之间同步检查的时间间隔，单位是秒 
+authentication {      //验证类型和密码 
+  auth_type PASS 
+  auth_pass 1111
+} 
+virtual_ipaddress {    //虚拟IP 
+  192.168.1.8
+  #192.168.1.9    //如果有多个，往下加就行了 
+  #192.168.1.7
+} 
+} 
+virtual_server 192.168.1.8 80 {    //定义虚拟服务器 
+  delay_loop 6                  //健康检查时间，单位是秒 
+  lb_algo rr              //负载调度算法，这里设置为rr，即轮询算法 
+  lb_kind DR              //LVS实现负载均衡的机制，可以有NAT、TUN和DR三个模式可选 
+  persistence_timeout 50        //会话保持时间，单位是秒（可以适当延长时间以保持session） 
+  protocol TCP                  //转发协议类型，有tcp和udp两种 
+  sorry_server 127.0.0.1 80      //web服务器全部失败，vip指向本机80端口 
+  real_server 192.168.1.16 80 {  //定义WEB服务器 
+  weight 1                  //权重 
+  TCP_CHECK {                //通过tcpcheck判断RealServer的健康状态 
+    connect_timeout 5      //连接超时时间 
+    nb_get_retry 3        //重连次数 
+    delay_before_retry 3  //重连间隔时间 
+    connect_port 80        //检测端口 
+  } 
+} 
+  real_server 192.168.1.17 80 { 
+    weight 1
+    TCP_CHECK { 
+      connect_timeout 5
+      nb_get_retry 3
+      delay_before_retry 3
+      connect_port 80
+    } 
+  } 
+}
+```
+
+```
+! Configuration File forkeepalived
+global_defs {
+    smtp_server 127.0.0.1
+    smtp_connect_timeout 30
+    router_id MYSQL_HA        #标识，不同keepalived实例router_id不能相同
+}
+vrrp_instance VI_1 {		 #定义vrrp实例 
+    state BACKUP              #两台都设置BACKUP
+    interface bond0           #虚IP要绑定的端口
+    virtual_router_id 32      #主备相同，不同实例该值不能相同, //sun:同一实例下virtual_router_id必须相同 
+    priority 100              #优先级，backup设置90
+    advert_int 1			 //MASTER与BACKUP负载均衡器之间同步检查的时间间隔，单位是秒 
+    nopreempt                 #不主动抢占资源
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        192.168.143.32        #虚IP
+    }
+}
+virtual_server VIP 3306 {
+    delay_loop 2			 # service polling的delay时间，即服务轮询的时间间隔
+    #lb_algo rr               #LVS算法，用不到，我们就关闭了
+    #lb_kind DR               #LVS模式，如果不关闭，备用服务器不能通过VIP连接主MySQL
+    persistence_timeout 50    #同一IP的连接60秒内被分配到同一台真实服务器
+    protocol TCP			 #健康检查用的是TCP还是UDP
+    real_server 192.168.143.65 3306 {   #检测本地mysql，backup也要写检测本地mysql; //sun:此时mysql的master容器的节点的ip地址是192.168.143.65
+            weight 3		#sun:权重
+            notify_down /etc/keepalived/mysql.sh    #当mysq服务down时，执行此脚本，杀死keepalived实现切换
+            TCP_CHECK {
+                connect_timeout 3    #连接超时
+                #nb_get_retry 3       #重试次数
+                #delay_before_retry 3 #重试间隔时间
+    }
+}
+```
+
+
 
 http://freeloda.blog.51cto.com/2033581/1280962
