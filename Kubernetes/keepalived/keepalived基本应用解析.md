@@ -174,7 +174,7 @@ global_defs {
    smtp_connect_timeout 30
    router_id LVS_DEVEL
 }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+
 vrrp_instance VI_1 {
     state BACKUP                         #状态
     interface eth0

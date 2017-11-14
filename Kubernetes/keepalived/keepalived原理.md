@@ -65,6 +65,11 @@ Keepalived使用的vrrp协议方式，虚拟路由冗余协议 (Virtual Router R
 
 参考地址:http://blog.csdn.net/wngua/article/details/54668794
 
+> 总结:
+>
+> 1. keepalived 底层依赖了LVS, 但是并不是安装ipvsadm来配置LVS,而是用配置文件来代替ipvsadm来配置LVS;
+> 2. ​
+
 ```
 如果你没有配置LVS+keepalived那么无需配置这段区域，里如果你用的是nginx来代替LVS，这无限配置这款，这里的LVS配置是专门为keepalived+LVS集成准备的。
 注意了，这里LVS配置并不是指真的安装LVS然后用ipvsadm来配置他，而是用keepalived的配置文件来代替ipvsadm来配置LVS，这样会方便很多，一个配置文件搞定这些，维护方便，配置方便是也！
@@ -132,24 +137,24 @@ delay_before_retry 2                                      #重连间隔
 #下面是常用的健康检查方式，健康检查方式一共有HTTP_GET|SSL_GET|TCP_CHECK|SMTP_CHECK|MISC_CHECK这些
 #TCP方式
 TCP_CHECK {
-connect_port 80
-bindto 192.168.1.1
-connect_timeout 4
+  connect_port 80
+  bindto 192.168.1.1
+  connect_timeout 4
 } # TCP_CHECK
 
 # SMTP方式，这个可以用来给邮件服务器做集群
 SMTP_CHECK
 host {
-connect_ip <IP ADDRESS>
-connect_port <PORT>                                     #默认检查25端口
-14 KEEPALIVED
-bindto <IP ADDRESS>
+  connect_ip <IP ADDRESS>
+  connect_port <PORT>                                     #默认检查25端口
+  14 KEEPALIVED
+  bindto <IP ADDRESS>
 }
 connect_timeout <INTEGER>
-retry <INTEGER>
-delay_before_retry <INTEGER>
-# "smtp HELO"ž|·-ëê§Œà"
-helo_name <STRING>|<QUOTED-STRING>
+  retry <INTEGER>
+  delay_before_retry <INTEGER>
+  # "smtp HELO"ž|·-ëê§Œà"
+  helo_name <STRING>|<QUOTED-STRING>
 } #SMTP_CHECK
 
 #MISC方式，这个可以用来检查很多服务器只需要自己会些脚本即可
@@ -169,87 +174,84 @@ misc_dynamic                                               #这个就很好用�
 配置文件到此就讲完了，下面是一份未加备注的完整配置文件
 global_defs
 {
+	notification_email
+	{
+		admin@example.com
+	}
+	notification_email_from admin@example.com
+	smtp_server 127.0.0.1
+	stmp_connect_timeout 30
+	router_id node1
+}
 notification_email
 {
-admin@example.com
-}
-notification_email_from admin@example.com
-smtp_server 127.0.0.1
-stmp_connect_timeout 30
-router_id node1
-}
-notification_email
-{
-admin@example.com
-admin@ywlm.net
+  admin@example.com
+  admin@ywlm.net
 }
 
 static_ipaddress
 {
-192.168.1.1/24 brd + dev eth0 scope global
-192.168.1.2/24 brd + dev eth1 scope global
+	192.168.1.1/24 brd + dev eth0 scope global
+	192.168.1.2/24 brd + dev eth1 scope global
 }
 static_routes
 {
-src $SRC_IP to $DST_IP dev $SRC_DEVICE
-src $SRC_IP to $DST_IP via $GW dev $SRC_DEVICE
+	src $SRC_IP to $DST_IP dev $SRC_DEVICE
+	src $SRC_IP to $DST_IP via $GW dev $SRC_DEVICE
 }
 
 vrrp_sync_group VG_1 {
+  group {
+      http
+      mysql
+  }
+  notify_master /path/to/to_master.sh
+  notify_backup /path_to/to_backup.sh
+  notify_fault "/path/fault.sh VG_1"
+  notify /path/to/notify.sh
+  smtp_alert
+}
 group {
-http
-mysql
+  http
+  mysql
 }
-notify_master /path/to/to_master.sh
-notify_backup /path_to/to_backup.sh
-notify_fault "/path/fault.sh VG_1"
-notify /path/to/notify.sh
-smtp_alert
-}
-group {
-http
-mysql
-}
-
-
 vrrp_script check_running {
    script "/usr/local/bin/check_running"
    interval 10
    weight 10
 }
 
-
 vrrp_instance http {
-state MASTER
-interface eth0
-dont_track_primary
-track_interface {
-eth0
-eth1
-}
-mcast_src_ip <IPADDR>
-garp_master_delay 10
-virtual_router_id 51
-priority 100
-advert_int 1
-authentication {
-auth_type PASS
-autp_pass 1234
+  state MASTER
+  interface eth0
+  dont_track_primary
+  track_interface {
+    eth0
+    eth1
+  }
+  mcast_src_ip <IPADDR>
+  garp_master_delay 10
+  virtual_router_id 51
+  priority 100
+  advert_int 1
+  authentication {
+  auth_type PASS
+  autp_pass 1234
 }
 virtual_ipaddress {
-#<IPADDR>/<MASK> brd <IPADDR> dev <STRING> scope <SCOPT> label <LABEL>
-192.168.200.17/24 dev eth1
-192.168.200.18/24 dev eth2 label eth2:1
+  #<IPADDR>/<MASK> brd <IPADDR> dev <STRING> scope <SCOPT> label <LABEL>
+  192.168.200.17/24 dev eth1
+  192.168.200.18/24 dev eth2 label eth2:1
 }
 virtual_routes {
-# src <IPADDR> [to] <IPADDR>/<MASK> via|gw <IPADDR> dev <STRING> scope <SCOPE> tab
-src 192.168.100.1 to 192.168.109.0/24 via 192.168.200.254 dev eth1
-192.168.110.0/24 via 192.168.200.254 dev eth1
-192.168.111.0/24 dev eth2
-192.168.112.0/24 via 192.168.100.254
+  # src <IPADDR> [to] <IPADDR>/<MASK> via|gw <IPADDR> dev <STRING> scope <SCOPE> tab
+  src 192.168.100.1 to 192.168.109.0/24 via 192.168.200.254 dev eth1
+  192.168.110.0/24 via 192.168.200.254 dev eth1
+  192.168.111.0/24 dev eth2
+  192.168.112.0/24 via 192.168.100.254
 }
 track_script {
-check_running weight 20
+	check_running weight 20
 }
 
 nopreempt
@@ -258,15 +260,13 @@ debug
 }
 
 virtual_server_group <STRING> {
-# VIP port
-< IPADDR> <PORT>
-< IPADDR> <PORT>
-fwmark <INT>
+  # VIP port
+  < IPADDR> <PORT>
+  < IPADDR> <PORT>
+  fwmark <INT>
 }
-
 virtual_server 192.168.1.2 80 {
 delay_loop 3
-
 lb_algo rr|wrr|lc|wlc|lblc|sh|dh
 lb_kind NAT|DR|TUN
 persistence_timeout 120
@@ -329,20 +329,22 @@ vrrp_sync_group VGM {  //定义一个vrrp组
   } 
 } 
 vrrp_instance VI_1 {    //定义vrrp实例 
-state MASTER        //主LVS是MASTER,从的BACKUP 
-interface eth0      //LVS监控的网络接口 
-virtual_router_id 51  //同一实例下virtual_router_id必须相同 
+state MASTER        	//主LVS是MASTER,从的BACKUP 
+interface eth0      	//LVS监控的网络接口 
+virtual_router_id 51  	//同一实例下virtual_router_id必须相同 
 priority 100            //定义优先级，数字越大，优先级越高 
-advert_int 5          //MASTER与BACKUP负载均衡器之间同步检查的时间间隔，单位是秒 
-authentication {      //验证类型和密码 
-  auth_type PASS 
-  auth_pass 1111
-} 
-virtual_ipaddress {    //虚拟IP 
-  192.168.1.8
-  #192.168.1.9    //如果有多个，往下加就行了 
-  #192.168.1.7
-} 
+advert_int 5          	//MASTER与BACKUP负载均衡器之间同步检查的时间间隔，单位是秒 
+  authentication {      //验证类型和密码 
+  					  //认证类型有PASS和AH（IPSEC），通常使用的类型为PASS，同一vrrp实例MASTER
+  					  //与BACKUP 使用相同的密码才能正常通信
+    auth_type PASS 
+    auth_pass 1111
+  } 
+  virtual_ipaddress {    //虚拟IP ##可以有多个VIP地址，每个地址占一行，不需要指定子网掩码，必须与RealServer上设定的VIP相一致
+    192.168.1.8
+    #192.168.1.9    //如果有多个，往下加就行了 
+    #192.168.1.7
+  } 
 } 
 virtual_server 192.168.1.8 80 {    //定义虚拟服务器 
   delay_loop 6                  //健康检查时间，单位是秒 
@@ -371,6 +373,8 @@ virtual_server 192.168.1.8 80 {    //定义虚拟服务器
   } 
 }
 ```
+
+ABC的配置:(主)
 
 ```
 ! Configuration File forkeepalived
@@ -411,6 +415,50 @@ virtual_server VIP 3306 {
 }
 ```
 
+备:
 
+```
+! Configuration File forkeepalived
+global_defs {
+    smtp_server 127.0.0.1
+    smtp_connect_timeout 30
+    router_id MYSQL_HA        #标识，不同keepalived实例router_id不能相同
+}
+vrrp_instance VI_1 {
+    state BACKUP              #两台都设置BACKUP
+    interface bond0            #虚IP要绑定的端口
+    virtual_router_id 32      #主备相同，不同实例该值不能相同
+    priority 90              #优先级，backup设置90
+    advert_int 1
+    nopreempt                 #不主动抢占资源
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        192.168.143.32        #虚IP
+    }
+}
+virtual_server VIP 3306 {
+    delay_loop 2
+    #lb_algo rr               #LVS算法，用不到，我们就关闭了
+    #lb_kind DR              #LVS模式，如果不关闭，备用服务器不能通过VIP连接主MySQL
+    persistence_timeout 50  #同一IP的连接60秒内被分配到同一台真实服务器
+    protocol TCP
+    real_server 192.168.143.60 3306 {   #检测本地mysql，backup也要写检测本地mysql
+            weight 3
+            notify_down /etc/keepalived/mysql.sh    #当mysq服务down时，执行此脚本，杀死keepalived实现切换
+            TCP_CHECK {
+                connect_timeout 3    #连接超时
+                #nb_get_retry 3       #重试次数
+                #delay_before_retry 3 #重试间隔时间
+    }
+}
+```
+
+经过对比,发现,两份配置文件的区别的地方就是:
+
+1. priority不同, 主的priority 是100,备的priority是90;
+2. real_server对应的ip地址不同,  主的对应的是mysql-master pod所在的物理机ip:143.64,而备对应的msql-slave pod所在的物理机的ip地址:143.60;
 
 http://freeloda.blog.51cto.com/2033581/1280962
