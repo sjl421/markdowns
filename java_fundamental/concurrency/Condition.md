@@ -203,7 +203,7 @@ private Node addConditionWaiter() {
 
 ### unlinkCancelledWaiters()
 
-unlinkCancelledWaiters() 方法会遍历整个等待队列，将队列中的已经被cancelled掉的节点移除掉；
+unlinkCancelledWaiters() 方法会遍历整个等待队列，将队列中在等待时间内被cancelled掉的节点移除掉；
 
 1. unlinkCancelledWaiters() 只会在获取锁的情况下执行；
 2. 该方法只有在wait condition的过程中发生了cancellation 并且是在往同步队列中插入新的等待节点时发现lastWaiter节点被cancelled了才会被调用；
@@ -310,7 +310,7 @@ final boolean transferForSignal(Node node) {
     //将节点加入到syn队列中去，返回的是syn队列中node节点前面的一个节点
     Node p = enq(node);
     int ws = p.waitStatus;
-    //如果结点p的状态为cancel 或者修改waitStatus失败，则直接唤醒
+    //如果它的前一个结点p的状态为cancel 或者修改waitStatus失败，则直接唤醒该这个节点的线程让他resync
     if (ws > 0 || !compareAndSetWaitStatus(p, ws, Node.SIGNAL))
         LockSupport.unpark(node.thread);
     return true;
