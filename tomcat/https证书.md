@@ -104,6 +104,10 @@ keytool -delete -keystore /usr/lib/jvm/jre/lib/security/cacerts -alias dtcenter.
 keytool -import -keystore /usr/lib/jvm/jre/lib/security/cacerts -file /mnt/crt/tomcat.crt -alias dtcenter.crt -storepass changeit -noprompt
 ```
 
+
+
+
+
 ---
 
 尝试命令:
@@ -118,5 +122,17 @@ keytool -genkey -alias apiservice -keypass changeit -keyalg RSA -keysize 1024 -v
 
 ```
 keytool -export -alias apiservice -keystore apiservice.keystore -file apiservice.cer -storepass changeit
+```
+
+```
+keytool -list -v -keystore myService.keystore
+```
+
+```
+ keytool  -list /usr/lib/jvm/jre/lib/security/cacerts  - sto
+```
+
+```
+keytool -list -keystore  /usr/lib/jvm/jre/lib/security/cacerts  -storepass changeit
 ```
 

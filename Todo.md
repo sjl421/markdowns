@@ -18,4 +18,4 @@
 14. abc部署脚本中的东西;
 15. 完成自己ADB的部署脚本;
 16. ssh 打通;
-17. keepalived的使用;
+17. keepalived的使用（part）;
