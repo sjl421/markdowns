@@ -138,3 +138,5 @@ offer(E e)就是往PriorityQueue中添加元素。整个过程还是比较简单
 
 
 （原文地址：http://cmsblogs.com/?p=2413）
+
+推荐阅读: https://www.cnblogs.com/sunzhenchao/p/3515085.html 
