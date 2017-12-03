@@ -213,7 +213,7 @@ static int hash(int h) {
 ```
 static int indexFor(int h, int length) {
         return h & (length-1);
-    }
+}
 ```
 
 ​      HashMap的底层数组长度总是2的n次方，在构造函数中存在：capacity <<= 1;这样做总是能够保证HashMap的底层数组长度为2的n次方。当length为2的n次方时，h&(length - 1)就相当于对length取模，而且速度比直接取模快得多，这是HashMap在速度上的一个优化。至于为什么是2的n次方下面解释。
@@ -279,7 +279,7 @@ void addEntry(int hash, K key, V value, int bucketIndex) {
 
 ​      这个方法中有两点需要注意：
 
-**      一是链的产生。**这是一个非常优雅的设计。系统总是将新的Entry对象添加到bucketIndex处。如果bucketIndex处已经有了对象，那么新添加的Entry对象将指向原有的Entry对象，形成一条Entry链，但是若bucketIndex处没有Entry对象，也就是e==null,那么新添加的Entry对象指向null，也就不会产生Entry链了。
+**      一是链的产生。**这是一个非常优雅的设计。系统总是将新的Entry对象添加到bucketIndex处(新插入的数据总是在链表的头部）。如果bucketIndex处已经有了对象，那么新添加的Entry对象将指向原有的Entry对象，形成一条Entry链，但是若bucketIndex处没有Entry对象，也就是e==null,那么新添加的Entry对象指向null，也就不会产生Entry链了。
 
 **      二、扩容问题。**
 
@@ -309,8 +309,6 @@ public V get(Object key) {
 
 ​      在这里能够根据key快速的取到value除了和HashMap的数据结构密不可分外，还和Entry有莫大的关系，在前面就提到过，HashMap在存储过程中并没有将key，value分开来存储，而是当做一个整体key-value来处理的，这个整体就是Entry对象。同时value也只相当于key的附属而已。在存储的过程中，系统根据key的hashcode来决定Entry在table数组中的存储位置，在取的过程中同样根据key的hashcode取出相对应的Entry对象。如果判断key==null,则调用getForNullKey()来获取table[0]的元素;
 
-
-
 > 要牢记以下关键点：
 >
 > HashMap有一个叫做Entry的内部类，它用来存储key-value对。
@@ -318,6 +316,8 @@ public V get(Object key) {
 > 上面的Entry对象是存储在一个叫做table的Entry数组中。
 >
 > table的索引在逻辑上叫做“桶”(bucket)，它存储了链表的第一个元素。
+>
+> 链表的插入动作发生在链表的头部。
 >
 > key的hashcode()方法用来找到Entry对象所在的桶。
 >
