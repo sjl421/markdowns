@@ -96,6 +96,207 @@ Lightweight lock manager
 NON_EXEC_STATIC LWLockPadded *LWLockArray = NULL;
 ```
 
+```
+typedef struct LWLock
+{
+	//用来控制LWlock的并发访问，在获取LWLock时（更新LWLock信息时，需要先获取LWLock->mutex);
+	slock_t		mutex;			/* Protects LWLock and queue of PGPROCs */
+	bool		releaseOK;		/* T if ok to release waiters */ //表示锁没有被占用
+	char		exclusive;		/* # of exclusive holders (0 or 1) */ // 表示锁被排他占有
+	int			shared;			/* # of shared holders (0..MaxBackends) */ //表示锁被同向占有
+	int			exclusivePid;	/* PID of the exclusive holder. */
+	PGPROC	   *head;			/* head of list of waiting PGPROCs */
+	PGPROC	   *tail;			/* tail of list of waiting PGPROCs */
+	/* tail is undefined when head is NULL */
+} LWLock;
+```
+
+
+
+**void**
+**LWLockAcquire(LWLockId lockid, LWLockMode mode)**
+
+```
+	for (;;)
+	{
+		bool		mustwait;
+		int			c;
+		/* Acquire mutex.  Time spent holding mutex should be short! */
+		SpinLockAcquire(&lock->mutex);
+		/* If retrying, allow LWLockRelease to release waiters again */
+		if (retry)
+			lock->releaseOK = true;
+
+		/* If I can get the lock, do so quickly. */
+		if (mode == LW_EXCLUSIVE)
+		{
+			if (lock->exclusive == 0 && lock->shared == 0)
+			{
+				lock->exclusive++;
+				lock->exclusivePid = MyProcPid;
+				mustwait = false;
+			}
+			else
+				mustwait = true;
+		}
+		else
+		{
+			if (lock->exclusive == 0)
+			{
+				lock->shared++;
+				mustwait = false;
+			}
+			else
+				mustwait = true;
+		}
+
+		if (!mustwait)
+		{
+			LOG_LWDEBUG("LWLockAcquire", lockid, "acquired!");
+			break;				/* got the lock */
+		}
+
+		/*
+		 * Add myself to wait queue.
+		 *
+		 * If we don't have a PGPROC structure, there's no way to wait. This
+		 * should never occur, since MyProc should only be null during shared
+		 * memory initialization.
+		 */
+		if (proc == NULL)
+			elog(PANIC, "cannot wait without a PGPROC structure");
+
+		proc->lwWaiting = true;
+		proc->lwExclusive = (mode == LW_EXCLUSIVE);
+		lwWaitingLockId = lockid;
+		proc->lwWaitLink = NULL;
+		if (lock->head == NULL)
+			lock->head = proc;
+		else
+			lock->tail->lwWaitLink = proc;
+		lock->tail = proc;
+		
+		/* Can release the mutex now */
+		SpinLockRelease(&lock->mutex);
+
+		/*
+		 * Wait until awakened.
+		 *
+		 * Since we share the process wait semaphore with the regular lock
+		 * manager and ProcWaitForSignal, and we may need to acquire an LWLock
+		 * while one of those is pending, it is possible that we get awakened
+		 * for a reason other than being signaled by LWLockRelease. If so,
+		 * loop back and wait again.  Once we've gotten the LWLock,
+		 * re-increment the sema by the number of additional signals received,
+		 * so that the lock manager or signal manager will see the received
+		 * signal when it next waits.
+		 */
+		LOG_LWDEBUG("LWLockAcquire", lockid, "waiting");
+
+#ifdef LWLOCK_TRACE_MIRROREDLOCK
+	if (lockid == MirroredLock)
+		elog(LOG, "LWLockAcquire: waiting for MirroredLock (PID %u)", MyProcPid);
+#endif
+
+#ifdef LWLOCK_STATS
+		block_counts[lockid]++;
+#endif
+
+		for (c = 0; c < num_held_lwlocks; c++)
+		{
+			if (held_lwlocks[c] == lockid)
+				elog(PANIC, "Waiting on lock already held!");
+		}
+
+		PG_TRACE2(lwlock__startwait, lockid, mode);
+
+		for (;;)
+		{
+			/* "false" means cannot accept cancel/die interrupt here. */
+#ifndef LOCK_DEBUG
+			PGSemaphoreLock(&proc->sem, false);
+#else
+			LWLockTryLockWaiting(proc, lockid, mode);
+#endif
+			if (!proc->lwWaiting)
+				break;
+			extraWaits++;
+		}
+
+		PG_TRACE2(lwlock__endwait, lockid, mode);
+
+		LOG_LWDEBUG("LWLockAcquire", lockid, "awakened");
+
+#ifdef LWLOCK_TRACE_MIRROREDLOCK
+		if (lockid == MirroredLock)
+			elog(LOG, "LWLockAcquire: awakened for MirroredLock (PID %u)", MyProcPid);
+#endif
+		/* Now loop back and try to acquire lock again. */
+		retry = true;
+```
+
+**void**
+**LWLockRelease(LWLockId lockid)**
+
+```
+	//获取锁
+	volatile LWLock *lock = &(LWLockArray[lockid].lock);
+	//获取锁的mutex
+	SpinLockAcquire(&lock->mutex);
+	/* Release my hold on lock */
+	if (lock->exclusive > 0)
+	{
+		lock->exclusive--;
+		lock->exclusivePid = 0;
+	}
+	else
+	{
+		Assert(lock->shared > 0);
+		lock->shared--;
+	}
+		head = lock->head;
+	if (head != NULL)
+	{
+		if (lock->exclusive == 0 && lock->shared == 0 && lock->releaseOK)
+		{
+			/*
+			 * Remove the to-be-awakened PGPROCs from the queue.  If the front
+			 * waiter wants exclusive lock, awaken him only. Otherwise awaken
+			 * as many waiters as want shared access.
+			 */
+			proc = head;
+			if (!proc->lwExclusive)
+			{
+				while (proc->lwWaitLink != NULL &&
+					   !proc->lwWaitLink->lwExclusive)
+				{
+					proc = proc->lwWaitLink;
+					if (proc->pid != 0)
+					{
+						lock->releaseOK = false;
+					}					
+				}
+			}
+			/* proc is now the last PGPROC to be released */
+			lock->head = proc->lwWaitLink;
+			proc->lwWaitLink = NULL;
+			
+			/* proc->pid can be 0 if process exited while waiting for lock */
+			if (proc->pid != 0)
+			{
+				/* prevent additional wakeups until retryer gets to run */
+				lock->releaseOK = false;
+			}
+		}
+		else
+		{
+			/* lock is still held, can't awaken anything */
+			head = NULL;
+		}
+	}
+	SpinLockRelease(&lock->mutex);
+```
+
 
 
 ### ipc.h
