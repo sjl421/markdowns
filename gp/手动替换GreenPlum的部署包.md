@@ -22,7 +22,7 @@ source /usr/local/adb_core/greenplum_path.sh
 
 2. 补齐git上没有的python包
 
-在已经部署好的环境上copy以下几个包:
+在已经部署好的环境上copy以下几个包,文件的位置时:源码目录/lib/python文件夹下:
 
 ```
 Crypto
