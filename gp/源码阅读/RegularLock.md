@@ -1,5 +1,16 @@
 #RegularLock(Lock)
 
+Lock的创建过程:
+
+PG中LWLock和RegulartLock均依赖共享内存实现, 这里先描述一下共享内存的创建动作;
+
+![Lock](G:\Download\Lock.png)
+
+1. PG里面创建工作内存的动作由PostMasterMain()完成,reset_shared()为 创建共享内存的总入口; 
+2. 共享内存的创建动作在函数CreateSharedMemoryAndSemaphores()中完成, 底层依次调用了PGSharedMemoryCreate() 和InternalIpcMemoryCreate;
+3. 在共享内存完成之后需要将共享内存attach到自己的进程空间中,该动作由函数PGSharedMemoryAttach完成;
+4. 在共享内存创建完成之后,PG会将共享内存划分为不同的用途并做初始化操作,会依次调用 CreateLWLocks()和InitLocks()来初始化LWLock和RegularLock;
+
 RegularLock 就是一般数据库事务管理中所指的锁；
 
 LOCK 结构体：
@@ -12,7 +23,9 @@ typedef struct LOCK
 
 	/* data */
 	LOCKMASK	grantMask;		/* bitmask for lock types already granted */
+							   //用来表示当前锁已经以哪些LOCKMODE的形式被占用了, 用来做LOCKMODE的互斥检测
 	LOCKMASK	waitMask;		/* bitmask for lock types awaited */
+							   //用来表是当前有哪些LOCKMODE在等待占用该锁
 	SHM_QUEUE	procLocks;		/* list of PROCLOCK objects assoc. with lock */
 	PROC_QUEUE	waitProcs;		/* list of PGPROC objects waiting on lock */
 	int			requested[MAX_LOCKMODES];		/* counts of requested locks */
@@ -143,7 +156,7 @@ LockAcquire(const LOCKTAG *locktag,
 //dontWait: 表示无法在立即获取锁时是否等待,true表示不等待,false表示等待;
 ```
 
-1. 以HASH_ENTER的方式在LockMethodLocalHash 的local hashtable中搜索该localtag的锁，如果hashtable中没有该锁，则在local hashtable中创建并初始化;
+1. 以HASH_ENTER的方式在LockMethodLocalHash的本地hashtable中搜索该locktag对应的锁，如果本地HashTabel中没有该锁，则在其中创建该并初始化;
 
    如果当前线程已经获得了锁，则增加本地的锁计数并返回，不对共享内存做操作；
 
@@ -185,9 +198,15 @@ LockAcquire(const LOCKTAG *locktag,
 
 ###LockRelease
 
+LockRelease() 函数主要用来表是锁的释放过程;
+
 ```
 bool LockRelease(const LOCKTAG *locktag, LOCKMODE lockmode, bool sessionLock)
 ```
+
+
+
+![锁的释放](G:\Download\锁的释放.png)
 
 1. 根据LOCKTAG,在本地LockMethodLocalHash表中搜索lock; 如果线程已经获取了该锁,则应该在本地的LocalLock table中是有记录的;
 
@@ -199,12 +218,28 @@ bool LockRelease(const LOCKTAG *locktag, LOCKMODE lockmode, bool sessionLock)
 
 2. 减小本地locallock->nLocks--的计数.
 
-   如果计数不为零,则表示我们之前是多次获取了同一个锁,并且此次释放之后本线程还持有该锁,此时只减小计数,返回true
+   如果计数不为零,则表示我们之前是多次获取了同一个锁,此时只减小计数,返回true
 
    ```
    locallock->nLocks--;
    if (locallock->nLocks > 0)
    	return TRUE;
+   ```
+
+3. 如果locallock->nLocks-- 后nLocks计数为0 
+
+   ```
+   	/*
+   	 * Do the releasing.  CleanUpLock will waken any now-wakable waiters.
+   	 */
+   	wakeupNeeded = UnGrantLock(lock, lockmode, proclock, lockMethodTable);
+
+   	CleanUpLock(lock, proclock,
+   				lockMethodTable, locallock->hashcode,
+   				wakeupNeeded);
+   	...
+       RemoveLocalLock(locallock);
+       return TRUE
    ```
 
 ### 具体的锁
@@ -290,7 +325,7 @@ PROCLOCK:
 
 PROCLOCK对象被连接到了与它关联的LOCK对象中
 
->  Each PROCLOCK object is linked into lists for both the associated LOCK object and the owning PGPROC object. 
+> Each PROCLOCK object is linked into lists for both the associated LOCK object and the owning PGPROC object. 
 
 ```
 typedef struct PROCLOCK
@@ -326,6 +361,48 @@ typedef struct PROCLOCK
 
    session level: 持有锁直到显式的释放锁或者直到事务结束;
 
-   transaction level: 
+   transaction level:
 
-  ​
+  RegularLock就是Table-Level Lock
+
+
+
+如何表示一个线程获取了某个锁:
+
+在线程本地的LocalLockHashTable中插入该锁对应的
+
+
+
+全局HashTable中的锁与本地HashTable中的锁的对应关系:
+
+​	本地HashTable中的LocalLock中只是保留了RegularLock的指针;
+
+
+
+Lock如何表征某个锁被占用了:
+
+Lock对象中通过nGranted, granted[lockmode], grantMask,waitMask四个字段来表示当前锁的状态;
+
+* nGranted 记录当前有多少进程占用了该锁,
+* granted[lockmode]用来记录当前锁以某种LOCKMODE被占用的次数;
+* grantMask: 所有被占用的LOCKMODE的集合;
+* waitMask:所有等待占用该锁的LOCKMODE的集合;
+* grantMask和waitMask用来做当前锁的LOCKMODE的互斥检测;
+
+表示占用某个锁只是更新以上四个字段;
+
+```
+lock->nGranted++;
+lock->granted[lockmode]++;
+lock->grantMask |= LOCKBIT_ON(lockmode);
+lock->waitMask &= LOCKBIT_OFF(lockmode);
+```
+
+
+
+
+
+
+
+
+
