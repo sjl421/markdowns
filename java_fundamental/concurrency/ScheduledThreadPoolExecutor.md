@@ -6,19 +6,3 @@
 * ScheduledFutureTask
 * DelayedWorkQueue
 
-
-
-```
-public ScheduledFuture<?> schedule(Runnable command,
-								   long delay,
-								   TimeUnit unit) {
-	if (command == null || unit == null)
-		throw new NullPointerException();
-	RunnableScheduledFuture<?> t = decorateTask(command,
-		new ScheduledFutureTask<Void>(command, null,
-									  triggerTime(delay, unit)));
-	delayedExecute(t);
-	return t;
-}
-```
-
