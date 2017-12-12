@@ -21,7 +21,7 @@ DelayQueue实现的关键主要有如下几个：
 
 DelayQueue中的元素都需要实现Delayed接口，该接口用来返回当前元素的过期时间还剩多少，如果getDelay()方法返回的值 <= 0，则标识该元素已经过期了，可以从队列中取出了；
 
-同时，由于DelayQueue中队列实现使用PriorityQueue实现的，所以Delayed也继承了Comparable接口，这样队列中的元素按照最早过期的元素来排列，最早过期的元素会排在前面；
+同时，由于**DelayQueue中队列实现使用PriorityQueue实现的**，所以Delayed也继承了Comparable接口，这样队列中的元素按照最早过期的元素来排列，最早过期的元素会排在前面；
 
 ```
 public interface Delayed extends Comparable<Delayed> {
