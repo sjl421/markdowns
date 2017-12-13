@@ -127,11 +127,152 @@ public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialD
     }
 ```
 
-
-
 ###DelayedWorkQueue
 
+​	DelayedWorkQueue 是ScheduledThreadPool用来保存要执行的task的队列，内部采用使用数组表示的heap结构，队列中delay时间最短的元素会放在队列头；
+
+​	内部主要通过siftUp()和siftDown()方法来实现元素在heap中的有序排列；
+
+```
+private static final int INITIAL_CAPACITY = 16;
+private RunnableScheduledFuture<?>[] queue =
+	new RunnableScheduledFuture<?>[INITIAL_CAPACITY];
+private final ReentrantLock lock = new ReentrantLock();	
+```
+
 ###获取元素
+
+**offer()**
+
+```
+public boolean offer(Runnable x) {
+    if (x == null)
+        throw new NullPointerException();
+    RunnableScheduledFuture<?> e = (RunnableScheduledFuture<?>)x;
+    final ReentrantLock lock = this.lock;
+    lock.lock();
+    try {
+        int i = size;
+        if (i >= queue.length)
+            grow();
+        size = i + 1;
+        //队列为空，将元素插入到队列头
+        if (i == 0) {
+            queue[0] = e;
+            setIndex(e, 0);
+        } else {
+            //队列不为空
+            siftUp(i, e);
+        }
+        if (queue[0] == e) {
+            leader = null;
+            available.signal();
+        }
+    } finally {
+        lock.unlock();
+    }
+    return true;
+}
+```
+
+```
+private void siftUp(int k, RunnableScheduledFuture<?> key) {
+    //以上虑的方式在heap（数组）中寻找放置key的位置
+    while (k > 0) {
+        int parent = (k - 1) >>> 1;
+        RunnableScheduledFuture<?> e = queue[parent];
+        if (key.compareTo(e) >= 0)
+            //找到了放置key的位置，退出循环
+            break;
+        queue[k] = e;
+        //设置索引
+        setIndex(e, k);
+        k = parent;
+    }
+    //将key放置到位置中
+    queue[k] = key;
+    //设置索引
+    setIndex(key, k);
+}
+```
+
+```
+private void siftDown(int k, RunnableScheduledFuture<?> key) {
+    int half = size >>> 1;
+    while (k < hal f) {
+        int child = (k << 1) + 1;
+        RunnableScheduledFuture<?> c = queue[child];
+        int right = child + 1;
+        if (right < size && c.compareTo(queue[right]) > 0)
+            c = queue[child = right];
+        if (key.compareTo(c) <= 0)
+            break;
+        queue[k] = c;
+        setIndex(c, k);
+        k = child;
+    }
+    queue[k] = key;
+    setIndex(key, k);
+}
+```
+
+我们举例说明：
+[![21](http://www.liuinsect.com/wp-content/uploads/2014/11/21.png)](http://www.liuinsect.com/wp-content/uploads/2014/11/21.png)
+这里的被移除元素分为两类，一类是被移除元素没有子节点的，一类是被移除元素有子节点的。
+从表中，根据二叉树的性质可以知道，位置索引大于等于队列长度一半的，没有子节点，小于队列长度一半的有子节点。
+因此，分两类来看：
+
+第一种情况：
+被移除元素没有子节点的：
+[![22](http://www.liuinsect.com/wp-content/uploads/2014/11/22.png)](http://www.liuinsect.com/wp-content/uploads/2014/11/22.png)
+这个时候，可知，siftDown方法中，k=6，key=[9]
+
+1. 计算后half=5，k>half,说明被移除元素没有子节点。直接将[9]也就是原有队列的最后一个元素 9号元素放入索引位置为6的位置后，结束。
+
+[![23](http://www.liuinsect.com/wp-content/uploads/2014/11/23.png)](http://www.liuinsect.com/wp-content/uploads/2014/11/23.png)
+第二种情况：
+被移除元素有子节点的。
+[![24](http://www.liuinsect.com/wp-content/uploads/2014/11/24.png)](http://www.liuinsect.com/wp-content/uploads/2014/11/24.png)
+这个时候，可知，k=3，key=[9]
+
+1. 计算后可知，k<half,child=7，c=[7],right=8.
+
+2. 进入第一个
+
+   if (right < size && c.compareTo(queue[right]) > 0)
+   c = queue[child = right];
+   这句话可以理解为选出[7],[8]两个位置中下次执行时间（超时时间）较小的那个，赋值给c.
+
+3. if (key.compareTo(c) <= 0)
+
+​	break;
+​	将c和key,比较，如果key比较小，直接将key放到[3]中，变成[7][8]的父节点
+[![25](http://www.liuinsect.com/wp-content/uploads/2014/11/25.png)](http://www.liuinsect.com/wp-content/uploads/2014/11/25.png)
+如果c比较小
+
+```
+queue[k] = c;
+setIndex(c, k);
+k = child;
+```
+
+将c放到位置3，然后在位置7,8中为key找合适的位置。
+
+put， add方法的底层调用的都是offer()方法：
+
+```
+    public void put(Runnable e) {
+        offer(e);
+    }
+
+    public boolean add(Runnable e) {
+        return offer(e);
+    }
+
+    public boolean offer(Runnable e, long timeout, TimeUnit unit) {
+        return offer(e);
+    }
+```
 
 **poll()**
 
@@ -205,3 +346,97 @@ private RunnableScheduledFuture<?> finishPoll(RunnableScheduledFuture<?> f) {
     }
 ```
 
+**poll()**
+
+```
+    public RunnableScheduledFuture<?> poll(long timeout, TimeUnit unit)
+        throws InterruptedException {
+        long nanos = unit.toNanos(timeout);
+        final ReentrantLock lock = this.lock;
+        lock.lockInterruptibly();
+        try {
+            for (;;) {
+                RunnableScheduledFuture<?> first = queue[0];
+                if (first == null) {
+                    if (nanos <= 0)
+                        return null;
+                    else
+                        nanos = available.awaitNanos(nanos);
+                } else {
+                    long delay = first.getDelay(NANOSECONDS);
+                    if (delay <= 0)
+                        return finishPoll(first);
+                    if (nanos <= 0)
+                        return null;
+                    first = null; // don't retain ref while waiting
+                    if (nanos < delay || leader != null)
+                        nanos = available.awaitNanos(nanos);
+                    else {
+                        Thread thisThread = Thread.currentThread();
+                        leader = thisThread;
+                        try {
+                            long timeLeft = available.awaitNanos(delay);
+                            nanos -= delay - timeLeft;
+                        } finally {
+                            if (leader == thisThread)
+                                leader = null;
+                        }
+                    }
+                }
+            }
+        } finally {
+            if (leader == null && queue[0] != null)
+                available.signal();
+            lock.unlock();
+        }
+    }
+```
+
+```
+private RunnableScheduledFuture<?> finishPoll(RunnableScheduledFuture<?> f) {
+    int s = --size;
+    //取出队列的末尾元素，将其放入到heap的头部后再下虑
+    RunnableScheduledFuture<?> x = queue[s];
+    queue[s] = null;
+    if (s != 0)
+        siftDown(0, x);
+    setIndex(f, -1);
+    return f;
+}
+```
+
+**remove()**
+
+```
+public boolean remove(Object x) {
+    final ReentrantLock lock = this.lock;
+    lock.lock();
+    try {
+        //找到x元素的索引
+        int i = indexOf(x);
+        if (i < 0)
+            return false;
+
+        setIndex(queue[i], -1);
+        //获取队列中的最后一个元素
+        int s = --size;
+        RunnableScheduledFuture<?> replacement = queue[s];
+        queue[s] = null;
+        if (s != i) {
+            //通过siftDown寻找合适的元素放置到要替换掉的索引位置
+            siftDown(i, replacement);
+            if (queue[i] == replacement)
+                siftUp(i, replacement);
+        }
+        return true;
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+
+
+参考文献：
+
+1. http://ju.outofmemory.cn/entry/99456
