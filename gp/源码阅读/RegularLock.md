@@ -296,10 +296,13 @@ typedef struct LOCALLOCK
 
 	/* data */
 	LOCK	   *lock;			/* associated LOCK object in shared mem */
+							   //指针，指向该LOCALLOCK所关联的LOCK对象
 	PROCLOCK   *proclock;		/* associated PROCLOCK object in shmem */
+							   //指针，指向该LOCALLOCK所关联的PROCLOCK对象
 	uint32		hashcode;		/* copy of LOCKTAG's hash value */
 	bool		preparable;		/* MPP: During prepare we populate this to avoid MPP-1094 */
 	int64		nLocks;			/* total number of times lock is held */
+							   // 表示获取该锁的总次数
 	int			numLockOwners;	/* # of relevant ResourceOwners */
 	int			maxLockOwners;	/* allocated size of array */
 	LOCALLOCKOWNER *lockOwners; /* dynamically resizable array */
@@ -313,9 +316,8 @@ PROCLOCKTAG  用来确定proclock 在proclock hashtable中的位置,PROCLOCKTAG 
 ```
 typedef struct PROCLOCKTAG
 {
-	/* NB: we assume this struct contains no padding! */
-	LOCK	   *myLock;			/* link to per-lockable-object information */
-	PGPROC	   *myProc;			/* link to PGPROC of owning backend */
+	LOCK   *myLock;	            /* link to per-lockable-object information */
+	PGPROC *myProc;	            /* link to PGPROC of owning backend */
 } PROCLOCKTAG;
 ```
 
@@ -398,11 +400,98 @@ lock->grantMask |= LOCKBIT_ON(lockmode);
 lock->waitMask &= LOCKBIT_OFF(lockmode);
 ```
 
+### 三种锁的几种关系
+
+SpinLock, LWLock, RegularLock, 
+
+SpinLock是最底层的锁,与操作系统相关, 使用互斥信号量实现, 
+
+LWLock(Lightweight,轻量级锁) 主要用来控制共享内存的互斥访问, 底层的实现依赖SpinLock + 共享内存;
+
+RegularLock(简称Lock): 数据库事务管理中使用的锁,  底层的实现依赖LWLock + 共享内存;
+
+```
+...
+//获取LWLock
+LWLockAcquire(partitionLock, LW_EXCLUSIVE);
+
+//操作共享内存
+GrantLock(lock, proclock, lockmode);
+GrantLockLocal(locallock, owner);
+
+//释放k
+LWLockRelease(partitionLock);
+...
+```
+
+共享内存:
+
+```
+    共享内存是一段可以被多个进程同时访问的内存空间。是一种常见的进程间通信的方式。   
+    共享内存作为进程间通信机制的缺陷: 共享内存并未提供同步机制，在并发访问共享内存时需要其他的机制来控制对共享内存的互斥访问;
+```
 
 
 
+### 锁的几种模式
 
+```
+/* NoLock is not a lock mode, but a flag value meaning "don't get a lock" */
+#define NoLock					0
 
+#define AccessShareLock			1		/* SELECT */
+#define RowShareLock			2		/* SELECT FOR UPDATE/FOR SHARE */
+#define RowExclusiveLock		3		/* INSERT, UPDATE, DELETE */
+#define ShareUpdateExclusiveLock 4		/* VACUUM (non-FULL),ANALYZE, CREATE
+										 * INDEX CONCURRENTLY */
+#define ShareLock				5		/* CREATE INDEX (WITHOUT CONCURRENTLY) */
+#define ShareRowExclusiveLock	6		/* like EXCLUSIVE MODE, but allows ROW
+										 * SHARE */
+#define ExclusiveLock			7		/* blocks ROW SHARE/SELECT...FOR
+										 * UPDATE */
+#define AccessExclusiveLock		8		/* ALTER TABLE, DROP TABLE, VACUUM
+										 * FULL, and unqualified LOCK TABLE */
+```
+
+###LOCK:
+
+```
+typedef struct LOCK
+{
+	/* hash key */
+	LOCKTAG		tag;			/* unique identifier of lockable object */
+
+	/* data */
+	LOCKMASK	grantMask;		/* bitmask for lock types already granted */
+							   //用来表示当前锁已经以哪些LOCKMODE的形式被占用了, 用来做LOCKMODE的互斥检测
+	LOCKMASK	waitMask;		/* bitmask for lock types awaited */
+							   //用来表是当前有哪些LOCKMODE在等待占用该锁
+	SHM_QUEUE	procLocks;		/* list of PROCLOCK objects assoc. with lock */
+	PROC_QUEUE	waitProcs;		/* list of PGPROC objects waiting on lock */
+	int			requested[MAX_LOCKMODES];		/* counts of requested locks */
+	//记录该锁的每种请求模式被请求的此时(包括已经被grant的锁模式)
+	int			nRequested;		/* total of requested[] array */
+	//requested数组的长度;
+	int			granted[MAX_LOCKMODES]; /* counts of granted locks */
+	//记录锁在每种请求模式上被分配的锁的数量;
+	int			nGranted;		/* total of granted[] array */
+	//granted数组的长度;
+} LOCK;
+```
+
+Lock和数据库对象之间的关系:
+
+```
+typedef struct LOCKTAG
+{
+	uint32		locktag_field1; /* a 32-bit ID field */
+	uint32		locktag_field2; /* a 32-bit ID field */
+	uint32		locktag_field3; /* a 32-bit ID field */
+	uint16		locktag_field4; /* a 16-bit ID field */
+	uint8		locktag_type;	/* see enum LockTagType */
+	uint8		locktag_lockmethodid;	/* lockmethod indicator */
+} LOCKTAG;
+```
 
 
 

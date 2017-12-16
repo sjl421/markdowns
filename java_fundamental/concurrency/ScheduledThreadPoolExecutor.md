@@ -205,3 +205,96 @@ private RunnableScheduledFuture<?> finishPoll(RunnableScheduledFuture<?> f) {
     }
 ```
 
+
+
+
+
+###ScheduledFutureTask
+
+用来描述可调度任务；
+
+```
+private class ScheduledFutureTask<V>
+		extends FutureTask<V> implements RunnableScheduledFuture<V>;
+```
+
+Fields：
+
+```
+private final long sequenceNumber;	//序列号        
+/* 用来描述任务的执行的方式是单次（ont-shot）还是fixed-rate 还是 fixed-delay;
+ * 0： one-shot；
+ * 正数：fixed-rate；
+ * 负数：fixed-delay；
+ */
+private final long period;
+//设置的任务执行的时间点
+private long time;
+//该任务在Delay Queue中的索引值，用来快速Cancell任务
+int heapIndex;
+```
+
+构造器：
+
+```
+ScheduledFutureTask(Runnable r, V result, long ns) {
+	super(r, result);
+	this.time = ns;
+	this.period = 0;	//氮气
+	this.sequenceNumber = sequencer.getAndIncrement();
+}
+
+ScheduledFutureTask(Runnable r, V result, long ns, long period) {
+	super(r, result);
+	this.time = ns;
+	this.period = period;
+	this.sequenceNumber = sequencer.getAndIncrement();
+}
+
+ScheduledFutureTask(Callable<V> callable, long ns) {
+	super(callable);
+	this.time = ns;
+	this.period = 0;
+	this.sequenceNumber = sequencer.getAndIncrement();
+}
+```
+
+**isPeriodic**
+
+用来判断当前任务是否是periodic 任务；
+
+```
+public boolean isPeriodic() {
+	return period != 0;
+}
+```
+
+**run** 
+
+重写了FutureTask的run方法， 在内部判断该任务是否是periodic的而进行不同的处理；
+
+```
+public void run() {
+	boolean periodic = isPeriodic();
+	if (!canRunInCurrentRunState(periodic))
+		cancel(false);
+	else if (!periodic)
+		ScheduledFutureTask.super.run();
+	else if (ScheduledFutureTask.super.runAndReset()) {
+		setNextRunTime();
+		reExecutePeriodic(outerTask);
+	}
+}
+```
+
+```
+private void setNextRunTime() {
+	long p = period;
+	if (p > 0)
+		time += p;
+	else
+		time = triggerTime(-p);
+}
+
+```
+
