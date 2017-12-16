@@ -295,6 +295,5 @@ private void setNextRunTime() {
 	else
 		time = triggerTime(-p);
 }
-
 ```
 
