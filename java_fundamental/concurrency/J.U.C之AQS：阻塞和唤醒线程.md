@@ -16,10 +16,16 @@ if (shouldParkAfterFailedAcquire(p, node) &&
     private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
         //前驱节点
         int ws = pred.waitStatus;
-        //状态为signal，表示当前线程处于等待状态，直接放回true
+        /* 前置节点状态是signal，那当前节点可以安全阻塞，因为前置节点承诺执行完之后会通知唤醒当前
+* 节点
+*/
         if (ws == Node.SIGNAL)
             return true;
-        //前驱节点状态 > 0 ，则为Cancelled,表明该节点已经超时或者被中断了，需要从同步队列中取消
+            /*
+            * Predecessor was cancelled. Skip over predecessors and
+            * indicate retry.
+            */            
+        // 前置节点如果已经被取消了，则一直往前遍历直到前置节点不是取消状态，与此同时会修改链表关系
         if (ws > 0) {
             do {
                 node.prev = pred = pred.prev;
@@ -28,6 +34,14 @@ if (shouldParkAfterFailedAcquire(p, node) &&
         } 
         //前驱节点状态为Condition、propagate
         else {
+            /*
+             * waitStatus must be 0 or PROPAGATE.  Indicate that we
+             * need a signal, but don't park yet.  Caller will need to
+             * retry to make sure it cannot acquire before parking.
+             */
+// 前置节点是0或者propagate状态，这里通过CAS把前置节点状态改成signal
+// 这里不返回true让当前节点阻塞，而是返回false，目的是让调用者再check一下当前线程是否能
+// 成功获取锁，失败的话再阻塞，这里说实话我也不是特别理解这么做的原因        
             compareAndSetWaitStatus(pred, ws, Node.SIGNAL);
         }
         return false;
@@ -66,30 +80,62 @@ parkAndCheckInterrupt() 方法主要是把当前线程挂起，从而阻塞住�
     }
 ```
 
+我们先看tryRelease方法,tryRelease()方法也是有具体的同步组件来实现：
+
+```
+protected final boolean tryRelease(int releases) {
+// 释放后c的状态值
+            int c = getState() - releases;
+// 如果持有锁的线程不是当前线程，直接抛出异常
+            if (Thread.currentThread() != getExclusiveOwnerThread())
+                throw new IllegalMonitorStateException();
+            boolean free = false;
+            if (c == 0) {
+// 如果c==0，说明所有持有锁都释放完了，其他线程可以请求获取锁
+                free = true;
+                setExclusiveOwnerThread(null);
+            }
+// 这里只会有一个线程执行到这，不存在竞争，因此不需要CAS
+            setState(c);
+            return free;
+        }
+```
+
 调用unparkSuccessor(Node node)唤醒后继节点：
 
 ```
-    private void unparkSuccessor(Node node) {
-        //当前节点状态
+private void unparkSuccessor(Node node) {
+        /*
+         * If status is negative (i.e., possibly needing signal) try
+         * to clear in anticipation of signalling.  It is OK if this
+         * fails or if status is changed by waiting thread.
+         */
         int ws = node.waitStatus;
-        //当前状态 < 0 则设置为 0
         if (ws < 0)
+/*
+如果状态小于0，把状态改成0，0是空的状态，因为node这个节点的线程释放了锁后续不需要做任何
+操作，不需要这个标志位，即便CAS修改失败了也没关系，其实这里如果只是对于锁来说根本不需要CAS，因为这个方法只会被释放锁的线程访问，只不过unparkSuccessor这个方法是AQS里的方法就必须考虑到多个线程同时访问的情况（可能共享锁或者信号量这种）
+*/
             compareAndSetWaitStatus(node, ws, 0);
 
-        //当前节点的后继节点
+        /*
+         * Thread to unpark is held in successor, which is normally
+         * just the next node.  But if cancelled or apparently null,
+         * traverse backwards from tail to find the actual
+         * non-cancelled successor.
+         */
         Node s = node.next;
-        //后继节点为null或者其状态 > 0 (超时或者被中断了)
+// 这段代码的作用是如果下一个节点为空或者下一个节点的状态>0（目前大于0就是取消状态）
+// 则从tail节点开始遍历找到离当前节点最近的且waitStatus<=0（即非取消状态）的节点并唤醒
         if (s == null || s.waitStatus > 0) {
             s = null;
-            //从tail节点来找可用节点
             for (Node t = tail; t != null && t != node; t = t.prev)
                 if (t.waitStatus <= 0)
                     s = t;
         }
-        //唤醒后继节点
         if (s != null)
             LockSupport.unpark(s.thread);
-    }
+    }    
 ```
 
 可能会存在当前线程的后继节点为null，超时、被中断的情况，如果遇到这种情况了，则需要跳过该节点，但是为何是从tail尾节点开始，而不是从node.next开始呢？原因在于node.next仍然可能会存在null或者取消了，所以采用tail回溯办法找第一个可用的线程。最后调用LockSupport的unpark(Thread thread)方法唤醒该线程。
@@ -142,3 +188,7 @@ public native void unpark(Object var1);
 2. [LockSupport的park和unpark的基本使用,以及对线程中断的响应性](http://www.tuicool.com/articles/MveUNzF)
 
 （原文地址：http://cmsblogs.com/?p=2205）
+
+参考：
+
+1. http://ifeve.com/juc-aqs-reentrantlock/
