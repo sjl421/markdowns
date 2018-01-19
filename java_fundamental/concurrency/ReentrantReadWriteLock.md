@@ -111,6 +111,83 @@ Thread-5 be ready to write data!
 Thread-5 have write data: 8496
 ```
 
+// 以下是jvm 源码中提供的例子
+
+```
+ * <pre> {@code
+ * class CachedData {
+ *   Object data;
+ *   volatile boolean cacheValid;
+ *   final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
+ *
+ *   void processCachedData() {
+ *     rwl.readLock().lock();
+ *     if (!cacheValid) {
+ *       // Must release read lock before acquiring write lock
+ *       rwl.readLock().unlock();
+ *       rwl.writeLock().lock();
+ *       try {
+ *         // Recheck state because another thread might have
+ *         // acquired write lock and changed state before we did.
+ *         if (!cacheValid) {
+ *           data = ...
+ *           cacheValid = true;
+ *         }
+ *         // Downgrade by acquiring read lock before releasing write lock
+ *         rwl.readLock().lock();
+ *       } finally {
+ *         rwl.writeLock().unlock(); // Unlock write, still hold read
+ *       }
+ *     }
+ *
+ *     try {
+ *       use(data);
+ *     } finally {
+ *       rwl.readLock().unlock();
+ *     }
+ *   }
+ * }}</pre>
+ *
+ * ReentrantReadWriteLocks can be used to improve concurrency in some
+ * uses of some kinds of Collections. This is typically worthwhile
+ * only when the collections are expected to be large, accessed by
+ * more reader threads than writer threads, and entail operations with
+ * overhead that outweighs synchronization overhead. For example, here
+ * is a class using a TreeMap that is expected to be large and
+ * concurrently accessed.
+ *
+ *  <pre> {@code
+ * class RWDictionary {
+ *   private final Map<String, Data> m = new TreeMap<String, Data>();
+ *   private final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
+ *   private final Lock r = rwl.readLock();
+ *   private final Lock w = rwl.writeLock();
+ *
+ *   public Data get(String key) {
+ *     r.lock();
+ *     try { return m.get(key); }
+ *     finally { r.unlock(); }
+ *   }
+ *   public String[] allKeys() {
+ *     r.lock();
+ *     try { return m.keySet().toArray(); }
+ *     finally { r.unlock(); }
+ *   }
+ *   public Data put(String key, Data value) {
+ *     w.lock();
+ *     try { return m.put(key, value); }
+ *     finally { w.unlock(); }
+ *   }
+ *   public void clear() {
+ *     w.lock();
+ *     try { m.clear(); }
+ *     finally { w.unlock(); }
+ *   }
+ * }}</pre>
+```
+
+
+
 ## jvm 源码
 
 重入锁ReentrantLock是排他锁，排他锁在同一时刻仅有一个线程可以进行访问，但是在大多数场景下，大部分时间都是提供读服务，而写服务占有的时间较少。然而读服务不存在数据竞争问题，如果一个线程在读时禁止其他线程读势必会导致性能降低。所以就提供了读写锁。
@@ -267,6 +344,7 @@ protected final boolean tryAcquire(int acquires) {
         setState(c + acquires);
         return true;
     }
+    //writerShouldBlock():写锁是否需要等待（公平锁原则）
     if (writerShouldBlock() ||
         !compareAndSetState(c, c + acquires))
         return false;
@@ -347,7 +425,7 @@ tryAcqurireShared(int arg)尝试获取读同步状态，该方法主要用于获
 读锁获取的过程相对于独占锁而言会稍微复杂下，整个过程如下：
 
 1. 因为存在锁降级情况，如果存在写锁且锁的持有者不是当前线程则直接返回失败，否则继续
-2. 依据公平性原则，判断读锁是否需要阻塞，读锁持有线程数小于最大值（65535），且设置锁状态成功，执行以下代码（对于HoldCounter下面再阐述），并返回1。如果不满足改条件，执行fullTryAcquireShared()。
+2. 依据公平性原则，判断读锁是否需要阻塞，读锁持有线程数小于最大值（65535），且设置锁状态成功，执行以下代码（对于HoldCounter下面再阐述），并返回1。如果不满足该条件，执行fullTryAcquireShared()。
 
 ```
 final int fullTryAcquireShared(Thread current) {
@@ -559,5 +637,5 @@ int r = sharedCount(c);
 参考：
 
 1.  http://cmsblogs.com/?p=2213
-2. http://www.cnblogs.com/liuling/archive/2013/08/21/2013-8-21-03.html
+2.  http://www.cnblogs.com/liuling/archive/2013/08/21/2013-8-21-03.html
 
