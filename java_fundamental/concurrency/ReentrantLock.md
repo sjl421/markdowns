@@ -29,6 +29,7 @@ abstract static class Sync extends AbstractQueuedSynchronizer {
             final Thread current = Thread.currentThread();
             int c = getState();
             //只要该锁是没有被锁的状态，就去尝试获取该锁而不判断是否有其他线程已经在等待获取该锁
+            //实现的非公平的获取锁是通过直接调用compareAndSetState(0, acquires)来实现的，并没有借用CHL队列
             if (c == 0) {
                 if (compareAndSetState(0, acquires)) {
                     setExclusiveOwnerThread(current);
@@ -101,8 +102,9 @@ FaiSync 继承 Sync， 重写了其中的tryAcquire（int acquires）方法，�
             final Thread current = Thread.currentThread();
             int c = getState();
             //如果c==0，表示没有被锁
-            if (c == 0) {
-            	//判断是否有其他线程已经在等待获取该锁了
+            if (c == 0) {	
+            //判断是否有其他线程已经在等待获取该锁了
+            //实现的公平获取锁是通过在调动compareAndSetState(0, acquires)之前来检查是否hasQueuedPredecessors()来实现的，底层是借用了AQS的CHL队列，在判断队列头部有没有其他线程在等待获取锁
                 if (!hasQueuedPredecessors() &&
                     compareAndSetState(0, acquires)) {
                     setExclusiveOwnerThread(current);
@@ -121,6 +123,17 @@ FaiSync 继承 Sync， 重写了其中的tryAcquire（int acquires）方法，�
             return false;
         }
     }
+
+    public final boolean hasQueuedPredecessors() {
+        // The correctness of this depends on head being initialized
+        // before tail and on head.next being accurate if the current
+        // thread is first in queue.
+        Node t = tail; // Read fields in reverse initialization order
+        Node h = head;
+        Node s;
+        return h != t &&
+            ((s = h.next) == null || s.thread != Thread.currentThread());
+    }
 ```
 
 ### NonfairSync
@@ -133,10 +146,14 @@ FaiSync 继承 Sync， 重写了其中的tryAcquire（int acquires）方法，�
          */
         final void lock() {
           	//非公平锁在这里直接通过CAS尝试获取锁，如果失败就会进一步尝试通过acquire（）来获取锁
+            //首先尝试以快速的方式直接修改state值来获取锁，如果失败，就用常规的方式来获取锁
             if (compareAndSetState(0, 1))
                 setExclusiveOwnerThread(Thread.currentThread());
             else
                 acquire(1);
+          	/* AQS中的acquire方法，内部也是通过tryAcquire来快速的获取锁，如果没有获取到，则将
+             * 当前线程加入到CHL队列中, tryAcquire方法由同步组件自己实现
+             */
         }
 
         protected final boolean tryAcquire(int acquires) {
@@ -164,6 +181,12 @@ FaiSync 继承 Sync， 重写了其中的tryAcquire（int acquires）方法，�
         return sync.getOwner();
     }
 ```
+
+
+
+
+
+
 
 ## ReentrantLock与synchronized的区别
 
