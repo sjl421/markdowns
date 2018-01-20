@@ -54,6 +54,14 @@ private Generation generation = new Generation();
 private int count;
 ```
 
+CyclicBarrier 的实现是通过ReentrantLock 和 Condition来实现的，每一个线程调用CyclicBarrier的await()方法其实调用的同一个Condition的await()方法，所有线程等待同一个Condition；唤醒的时候只需要调用该Condition的signalAll()来唤醒所有等待该Condition的线程；
+
+CyclicBarrier内部有一个generation的概念，一个generation代表着一次的循环，需要等到所有的线程都调用了condition的await()方法，一次完整的循环过程才能结束，此generation才算完结，需要重启下一个新的generation，以此往复；
+
+如何判断一个generation结束呢？
+
+在CyclicBarrirer内部有一个**count**,初始值是CyclicBarrier需要等待多少个线程调用await()方法，它记录了当前generation中有多少个线程还没有调用await()方法进入等待，每当一个线程调用CyclicBarrier的await()方法时，count减1，直到count值减为0，表示当前所有线程都已经到达了屏障点，此时就可以调用barrierCommand了，然后再开启下一个generation，调用 condition的signalAll()方法，重置count值；
+
 ### 等待-await()
 
 await()方法是线程用来调用进入等待的方法，只是简单的调用了dowait()方法；
@@ -159,9 +167,13 @@ private int dowait(boolean timed, long nanos)
 }
 ```
 
-在上面的源代码中，我们可能需要注意Generation 对象，在上述代码中我们总是可以看到抛出BrokenBarrierException异常，那么什么时候抛出异常呢？如果一个线程处于等待状态时，如果其他线程调用reset()，或者调用的barrier原本就是被损坏的，则抛出BrokenBarrierException异常。同时，任何线程在等待时被中断了，则其他所有线程都将抛出BrokenBarrierException异常，并将barrier置于损坏状态。
+在上面的源代码中，我们可能需要注意Generation 对象，在上述代码中我们总是可以看到抛出BrokenBarrierException异常，那么什么时候抛出异常呢？
 
-​	同时，Generation描述着CyclicBarrier的更显换代。在CyclicBarrier中，同一批线程属于同一代。当有parties个线程到达barrier，generation就会被更新换代。其中broken标识该当前CyclicBarrier是否已经处于中断状态。
+* 如果一个线程处于等待状态时，如果其他线程调用reset()；
+* 或者调用的barrier原本就是被损坏的，则抛出BrokenBarrierException异常。
+* 同时，任何线程在等待时被中断了，则其他所有线程都将抛出BrokenBarrierException异常，并将barrier置于损坏状态。
+
+同时，Generation描述着CyclicBarrier的更显换代。在CyclicBarrier中，同一批线程属于同一代。当有parties个线程到达barrier，generation就会被更新换代。其中broken标识该当前CyclicBarrier是否已经处于中断状态。
 
 ```
     private static class Generation {
@@ -242,7 +254,5 @@ public class TestCyclicBarrier {
     }
 }
 ```
-
-
 
 CyclicBarrier试用与多线程结果合并的操作，用于多线程计算数据，最后合并计算结果的应用场景。比如我们需要统计多个Excel中的数据，然后等到一个总结果。我们可以通过多线程处理每一个Excel，执行完成后得到相应的结果，最后通过barrierAction来计算这些线程的计算结果，得到所有Excel的总和。

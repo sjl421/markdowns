@@ -18,6 +18,8 @@
 
 Condition是一种广义上的条件队列。他为线程提供了一种更为灵活的等待/通知模式，线程在调用await方法后执行挂起操作，直到线程等待的某个条件为真时才会被唤醒。Condition必须要配合锁一起使用，因为对共享状态变量的访问发生在多线程环境下。一个Condition的实例必须与一个Lock绑定，因此Condition一般都是作为Lock的内部实现。
 
+**在调用condition相关的方法之前，都需要先获取condition对应的锁**
+
 ### Condition示例代码
 
 ```
@@ -149,6 +151,15 @@ ConditionObject的FIFO对列的节点Node与AQS的CLH同步队列的节点使用
 
 ### 等待-await()
 
+1. 检查线程是否被中断，如果已经被中断了，则跑出异常；
+2. 检查队列最后一个节点是否被取消掉了，如果被取消掉了，则遍历整个队列，将队列中所有被取消的node从队列中移除；
+3. 经过第2步，队列中已经没有被取消的node了，直接以当前现场创建新的node，并将该node插入队里的尾部；
+4. 将线程加入到conditiond的fifo队列中后释放该线程获取的锁；
+5. 线程进去等待，直到有其他线程调用了signal方法，将该node从condition的fifo队列中移到Lock的CLH队列中；
+6. 该线程对应的node被移入到Lock的CLH队列后，参与该Condition所对应的Lock的竞争；
+
+//如果现在成等待的过程中（ while (!isOnSyncQueue(node)) 的过程中被cancel掉了，也得等其他线程调用了singal之后才能唤醒该线程；
+
 ```
 public final void await() throws InterruptedException {
     if (Thread.interrupted())
@@ -160,6 +171,13 @@ public final void await() throws InterruptedException {
     /**
     * 检测此节点的线程是否在同步队上，如果不在，则说明该线程还不具备竞争锁的资格，则继续等待
     * 直到检测到此节点在同步队列
+    *
+    * 这里的while()是await()将线程挂起的关键，退出while循环的条件检测线程是否在condition对应的lock的
+    * CLH队列上，只有当前node存在于CLH队列上时，线程才能参与condition关联的锁的竞争，才有可能被唤醒(
+    * 至于能不能唤醒或者何时唤醒需要看当前线程能否获取到对应的锁了)
+    *
+    * addConditionWaiter()方法只是将node加入到了condition的队列中，从conditon的队列中转移到CLH队列中
+    * 的操作是在调用condition的signal()方法是做的，所以，从await()方法从唤醒需要有其他线程调用该condition的 signal()方法;
     */
     while (!isOnSyncQueue(node)) {
        	//线程挂起
@@ -253,6 +271,31 @@ private void unlinkCancelledWaiters() {
 }
 ```
 
+**isOnSyncQueue(Node node)**
+
+```
+    final boolean isOnSyncQueue(Node node) {
+        /**
+         * 如果waitStatus == Node.CONDITION,则表明节点不在同步队列上
+         * 如果node.waitStatus != Node.CONDITION,并且node.perv == null, 即节点没有前继节点，则表明是同步队列的头结点,why?
+         * 如果node.next != null, 表明同步队列的后继节点，肯定在同步队列中
+         */
+        if (node.waitStatus == Node.CONDITION || node.prev == null)
+            return false;
+        if (node.next != null) // If has successor, it must be on queue
+            return true;
+        /*
+         * node.prev can be non-null, but not yet on queue because
+         * the CAS to place it on queue can fail. So we have to
+         * traverse from tail to make sure it actually made it.  It
+         * will always be near the tail in calls to this method, and
+         * unless the CAS failed (which is unlikely), it will be
+         * there, so we hardly ever traverse much.
+         */
+        return findNodeFromTail(node);
+    }
+```
+
 ### 通知-Signal()
 
 调用Condition的Singnal()方法，将会唤醒在等待队列中等待时间最长时间的节点（队列的首节点）， 在唤醒节点之前，会将节点移动到CLH同步队列中；
@@ -317,6 +360,30 @@ final boolean transferForSignal(Node node) {
 }
 ```
 
+**signalAll()**
+
+signalAll() 将所有在condition FIFO队列中的node全部转移到Lock的CLH中：
+
+```
+public final void signalAll() {
+	if (!isHeldExclusively())
+		throw new IllegalMonitorStateException();
+	Node first = firstWaiter;
+	if (first != null)
+		doSignalAll(first);
+}
+
+private void doSignalAll(Node first) {
+	lastWaiter = firstWaiter = null;
+	do {
+		Node next = first.nextWaiter;
+		first.nextWaiter = null;
+		transferForSignal(first);
+		first = next;
+	} while (first != null);
+}
+```
+
 整个通知的流程如下：
 
 1. 判断当前线程是否已经获取了锁，如果没有获取则直接抛出异常，因为获取锁为通知的前置条件。
@@ -329,8 +396,6 @@ final boolean transferForSignal(Node node) {
 一个线程获取锁后，通过调用Condition的await()方法，会将当前线程先加入到条件队列中，然后释放锁，最后通过isOnSyncQueue(Node node)方法不断自检看节点是否已经在CLH同步队列了，如果是则尝试获取锁，否则一直挂起。当线程调用signal()方法后，程序首先检查当前线程是否获取了锁，然后通过doSignal(Node first)方法唤醒CLH同步队列的首节点。被唤醒的线程，将从await()方法中的while循环中退出来，然后调用acquireQueued()方法竞争同步状态。
 
 其他其中await()的方式都是在await()的基础上稍微加了一些变形得到的；
-
-
 
 参考文献：
 
