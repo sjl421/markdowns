@@ -1,6 +1,6 @@
 #PriorityBlockingQueue
 
-PriorityBlockingQueue 是一个带优先级的阻塞队列。默认情况下元素采用自然顺序升序排序(类需要实现Comparable 接口)，当然我们也可以通过构造函数来指定Comparator来对元素进行排序。对于优先级相同的两个元素，PriorityBlockingQueue无法保证它们的顺序。
+PriorityBlockingQueue 是一个带优先级的阻塞队列。默认情况下元素采用自然顺序升序排序(类需要实现Comparable 接口，值大的与元素排列在后面)，当然我们也可以通过构造函数来指定Comparator来对元素进行排序。对于优先级相同的两个元素，PriorityBlockingQueue无法保证它们的顺序。
 
 理论上PriorityBlockingQueue是无界的，任何的添加操作都将会添加成功，直到耗尽资源耗尽为止。
 
@@ -12,7 +12,7 @@ Jvm中使用的基于数组的(以下简称队列)二叉堆来存储PriorityBloc
 
 理解二叉堆是理解PriorityBlockingQueue的关键.
 
-在队列Resize时通过一个自旋锁(spinlock) 来保证同步,并且Resize操作是在没有获取队里的main lock时做的,这样做的原因是这样可以允许队列在Resize时依然依然可以并发的从队列中take元素.
+在队列Resize时通过一个自旋锁(spinlock) 来保证同步,并且Resize操作是在没有获取队列的main lock时做的,这样做的原因是这样可以允许队列在Resize时依然依然可以并发的从队列中take元素.
 
 ### 成员变量 & 构造器
 
@@ -116,10 +116,11 @@ private void tryGrow(Object[] array, int oldCap) {
 		try {
 			//如果原始队列的与与三俗
 			int newCap = oldCap + ((oldCap < 64) ?
-								   (oldCap + 2) : // grow faster if small
-								   (oldCap >> 1));
+								   (oldCap + 2) : // grow faster if small， 增加 double + 2
+								   (oldCap >> 1)); // 增加50%
 			//判断新的队列的元素数是否超过最大值
 			if (newCap - MAX_ARRAY_SIZE > 0) {    // possible overflow
+			     //确保最少增加一个元素, 同时不能超过MAX_ARRAY_SIZE
 				int minCap = oldCap + 1;
 				if (minCap < 0 || minCap > MAX_ARRAY_SIZE)
 					throw new OutOfMemoryError();
@@ -149,6 +150,8 @@ private void tryGrow(Object[] array, int oldCap) {
 **二叉堆的上虑方法:**
 
 ```
+在调用siftUp方法时，都是先假设将元素放置在当前堆的最后一个元素之后，然后执行上虑动作再将元素上虑到合适的位置；
+//使用插入的元素自身的Comaparable接口，即实现自然排序
 private static <T> void siftUpComparable(int k, T x, Object[] array) {
 	Comparable<? super T> key = (Comparable<? super T>) x;
 	while (k > 0) {
@@ -161,6 +164,7 @@ private static <T> void siftUpComparable(int k, T x, Object[] array) {
 	}
 	array[k] = key;
 }
+//使用构造器提供的Comparator作比较
 private static <T> void siftUpUsingComparator(int k, T x, Object[] array,
 								   Comparator<? super T> cmp) {
 	while (k > 0) {
@@ -187,10 +191,13 @@ private E dequeue() {
 		return null;
 	else {
 		Object[] array = queue;
+		//取元素的时候都是取队列的第一个元素，也就是值(优先级)最小的元素,该元素是函数最后返回的元素
 		E result = (E) array[0];
+		//获取当前队列（数组)的最后一个元素
 		E x = (E) array[n];
 		array[n] = null;
 		Comparator<? super E> cmp = comparator;
+		//将队列的最后一个元素预放置到队列第一个位置，然后调用siftDown方法重新组织队列中元素的排列
 		if (cmp == null)
 			siftDownComparable(0, x, array, n);
 		else
