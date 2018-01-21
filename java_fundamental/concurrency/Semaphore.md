@@ -81,8 +81,6 @@ public final void acquireSharedInterruptibly(int arg)
     if (tryAcquireShared(arg) < 0)
         doAcquireSharedInterruptibly(arg);
 }
-
-
 ```
 
 说明：tryAcquireShared（arg）方法是在Sync的子类中实现的，FairSync和NonFairSync中都实现了该方法；
@@ -121,6 +119,8 @@ final int nonfairTryAcquireShared(int acquires) {
     }
 }
 ```
+
+公平模式和非公平模式主要就是在公平模式时acquire()的时候调用了 hasQueuedPredecessors() 来判断当前CLH队列中是否有其他线程在等待获取信号量
 
 信号量的批量获取：
 
