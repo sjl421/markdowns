@@ -61,7 +61,6 @@ TimeUnit.NANOSECONDS;       //纳秒
 ArrayBlockingQueue;
 LinkedBlockingQueue;
 SynchronousQueue;
-
 ```
 
 　　ArrayBlockingQueue和PriorityBlockingQueue使用较少，一般使用LinkedBlockingQueue和Synchronous。线程池的排队策略与BlockingQueue有关。
@@ -312,8 +311,6 @@ ThreadPoolExecutor.CallerRunsPolicy：由调用线程处理该任务
 
  　　执行结果：
 
-[![复制代码](http://common.cnblogs.com/images/copycode.gif)](javascript:void(0);)
-
 ```
 正在执行task 0
 线程池中线程数目：1，队列中等待执行的任务数目：0，已执行玩别的任务数目：0
@@ -361,8 +358,6 @@ task 7执行完毕
 task 6执行完毕
 task 9执行完毕
 ```
-
-[![复制代码](http://common.cnblogs.com/images/copycode.gif)](javascript:void(0);)
 
 　　从执行结果可以看出，当线程池中线程的数目大于5时，便将任务放入任务缓存队列里面，当任务缓存队列满了之后，便创建新的线程。如果上面程序中，将for循环中改成执行20个任务，就会抛出任务拒绝异常了。
 

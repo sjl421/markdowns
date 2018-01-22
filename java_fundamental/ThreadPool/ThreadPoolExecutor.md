@@ -10,7 +10,7 @@ Jvm中使用COUNT_BITS的高三位来表示线程池的五种状态,  五中状�
 
 * RUNNING: 处于RUNNING状态的线程池能够接受新任务，以及对新添加的任务进行处理。
 * SHUTDOWN: 处于SHUTDOWN状态的线程池不可以接受新任务，但是可以对已添加的任务进行处理。
-* STOP:处于STOP状态的线程池不接收新任务，不处理已添加的任务，并且会中断正在处理的任务。
+* STOP:处于STOP状态的线程池不接收新任务，不处理已添加的任务，**并且会中断正在处理的任务**。
 * TIDYING: 当所有的任务已终止，ctl记录的"有效的线程数量( effective number of threads)"为0，线程池会变为TIDYING状态。当线程池变为TIDYING状态时，会执行钩子函数terminated()。terminated()在ThreadPoolExecutor类中是空的，若用户想在线程池变为TIDYING时，进行相应的处理；可以通过重载terminated()函数来实现。
 * TERMINATED:线程池彻底终止的状态。
 
@@ -75,7 +75,7 @@ private volatile int corePoolSize;
 private volatile int maximumPoolSize;
 ```
 
-​	线程池中允许的最大线程数。线程池的阻塞队列满了之后，如果还有任务提交，如果当前的线程数小于maximumPoolSize，则会新建线程来执行任务。注意，如果使用的是无界队列，该参数也就没有什么效果了. 实际的maximumPoolSize不能超过CAPACITY. 
+​	线程池中允许的最大线程数。**线程池的阻塞队列满了之后**，如果还有任务提交，如果当前的线程数小于maximumPoolSize，则会新建线程来执行任务。注意，如果使用的是无界队列，该参数也就没有什么效果了. 实际的maximumPoolSize不能超过CAPACITY. 
 
 **unit**
 
@@ -87,7 +87,7 @@ keepAliveTime的单位。TimeUnit
 private volatile long keepAliveTime;
 ```
 
-​	线程空闲的时间,单位纳秒。线程的创建和销毁是需要代价的。线程执行完任务后不会立即销毁，而是继续存活一段时间：keepAliveTime。默认情况下，该参数只有在线程数大于corePoolSize时才会生效。
+​	线程空闲的时间,单位纳秒。线程的创建和销毁是需要代价的。线程执行完任务后不会立即销毁，而是继续存活一段时间：keepAliveTime。默认情况下，**该参数只有在线程数大于corePoolSize时才会生效**。
 
 **allowCoreThreadTimeOut:**
 
