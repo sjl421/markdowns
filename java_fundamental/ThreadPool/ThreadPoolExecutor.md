@@ -479,6 +479,7 @@ Woker的源码如下：
                     } catch (Throwable x) {
                         thrown = x; throw new Error(x);
                     } finally {
+                    	//自定义方法，可以在子类中重写该方法来实现在线程开始运行之前和结束运行之后做一些事情
                         afterExecute(task, thrown);
                     }
                 } finally {
