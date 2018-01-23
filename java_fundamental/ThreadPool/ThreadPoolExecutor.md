@@ -432,7 +432,16 @@ Woker的源码如下：
     }
 ```
 
-从Worker的源码中我们可以看到Woker继承AQS，实现Runnable接口，所以可以认为Worker既是一个可以执行的任务，也可以达到获取锁释放锁的效果。这里继承AQS主要是为了方便线程的中断处理。这里注意两个地方：构造函数、run()。构造函数主要是做三件事：1.设置同步状态state为-1，同步状态大于0表示就已经获取了锁，2.设置将当前任务task设置为firstTask，3.利用Worker本身对象this和ThreadFactory创建线程对象。
+从Worker的源码中我们可以看到Woker继承AQS，实现Runnable接口，所以可以认为Worker既是一个可以执行的任务，也可以达到获取锁释放锁的效果。
+
+这里继承AQS主要是为了**方便线程的中断处理**。
+
+这里注意两个地方：构造函数、run()。
+
+构造函数主要是做三件事：
+
+1. 设置同步状态state为-1，同步状态大于0表示就已经获取了锁，
+2. 设置将当前任务task设置为firstTask，3.利用Worker本身对象this和ThreadFactory创建线程对象。
 
 当线程thread启动（调用start()方法）时，其实就是执行Worker的run()方法，内部调用runWorker()。
 
@@ -453,13 +462,14 @@ Woker的源码如下：
         w.unlock(); // allow interrupts
         boolean completedAbruptly = true;
         try {
+            //主循环方法，通过getTask()方法不停的从workQueue中获取task并执行
             while (task != null || (task = getTask()) != null) {
                 // worker 获取锁
                 w.lock();
 
                 // 确保只有当线程是stoping时，才会被设置为中断，否则清楚中断标示
                 // 如果线程池状态 >= STOP ,且当前线程没有设置中断状态，则wt.interrupt()
-                // 如果线程池状态 < STOP，但是线程已经中断了，再次判断线程池是否 >= STOP，如果是 wt.interrupt()
+                // 如果线程池状态 < STOP，但是线程已经中断了，再次判断线程池是否 >= STOP，如果是 wt.interrupt()	
                 if ((runStateAtLeast(ctl.get(), STOP) ||
                         (Thread.interrupted() &&
                                 runStateAtLeast(ctl.get(), STOP))) &&
@@ -654,13 +664,15 @@ timed == true，调用poll()方法，如果在keepAliveTime时间内还没有获
                 interruptIdleWorkers(ONLY_ONE);
                 return;
             }
-
+            
+            //执行到这里，表示工作线程和workQueue为空
             final ReentrantLock mainLock = this.mainLock;
             mainLock.lock();
             try {
                 // 尝试终止线程池
                 if (ctl.compareAndSet(c, ctlOf(TIDYING, 0))) {
                     try {
+                    	//defalut do nothing
                         terminated();
                     } finally {
                         // 线程池状态转为TERMINATED
