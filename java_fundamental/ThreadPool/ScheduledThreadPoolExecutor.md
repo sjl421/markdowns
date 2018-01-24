@@ -26,10 +26,9 @@ public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit);
 
 // 创建并执行一个在给定初始延迟后首次启用的定期操作，后续操作具有给定的周期；也就是将在 initialDelay 后开始执行，然后在 initialDelay+period 后执行，接着在 initialDelay + 2 * period 后执行，依此类推。
 说明:scheduleAtFixedRate ，是以上一个任务开始的时间计时，period时间过去后，检测上一个任务是否执行完毕，如果上一个任务执行完毕，则当前任务立即执行，如果上一个任务没有执行完毕，则需要等上一个任务执行完毕后立即执行。
-public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period,
-											  TimeUnit unit);
+public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit);
 // 创建并执行一个在给定初始延迟后首次启用的定期操作，随后,在每一次执行终止和下一次执行开始之间都存在给定的延迟。
-public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay,long delay,                                                     TimeUnit unit);	
+public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay,long delay,TimeUnit unit);	
 ```
 
 ###ScheduledFuture接口
@@ -87,9 +86,8 @@ ScheduledExecutorService 提供的核心的调服方法主要就是`ScheduledExe
 ```
 public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit);
 <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit)
-public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period,
-											  TimeUnit unit);
-public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay,long delay,                                                     TimeUnit unit);	
+public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period,TimeUnit unit);
+public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay,long delay,TimeUnit unit);	
 ```
 
 ```
@@ -127,6 +125,66 @@ public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialD
     }
 ```
 
+decorateTask：
+
+该方法主要是为了让子类来override该方法，对要执行的task做一些
+
+```
+     * Modifies or replaces the task used to execute a callable.
+     * This method can be used to override the concrete
+     * class used for managing internal tasks.
+     * The default implementation simply returns the given task.
+    protected <V> RunnableScheduledFuture<V> decorateTask(
+        Callable<V> callable, RunnableScheduledFuture<V> task) {
+        return task;
+    }
+```
+
+delayedExecute： 主要就是将task放入队列中
+
+```
+    /**
+     * Main execution method for delayed or periodic tasks.  If pool
+     * is shut down, rejects the task. Otherwise adds task to queue
+     * and starts a thread, if necessary, to run it.  (We cannot
+     * prestart the thread to run the task because the task (probably)
+     * shouldn't be run yet.)  If the pool is shut down while the task
+     * is being added, cancel and remove it if required by state and
+     * run-after-shutdown parameters.
+     *
+     * @param task the task
+     */
+    private void delayedExecute(RunnableScheduledFuture<?> task) {
+        if (isShutdown())
+            reject(task);
+        else {
+            super.getQueue().add(task);
+            if (isShutdown() &&
+                !canRunInCurrentRunState(task.isPeriodic()) &&
+                remove(task))
+                task.cancel(false);
+            else
+                ensurePrestart();
+        }
+    }
+```
+
+```
+    /**
+     * Same as prestartCoreThread except arranges that at least one
+     * thread is started even if corePoolSize is 0.
+     */
+    void ensurePrestart() {
+        int wc = workerCountOf(ctl.get());
+        if (wc < corePoolSize)
+            addWorker(null, true);
+        else if (wc == 0)
+            addWorker(null, false);
+    }
+```
+
+
+
 ###DelayedWorkQueue
 
 ​	DelayedWorkQueue 是ScheduledThreadPool用来保存要执行的task的队列，内部采用使用数组表示的heap结构，队列中delay时间最短的元素会放在队列头；
@@ -134,7 +192,7 @@ public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialD
 ​	内部主要通过siftUp()和siftDown()方法来实现元素在heap中的有序排列；
 
 ```
-private static final int INITIAL_CAPACITY = 16;
+private static final int INITIAL_CAPACITY = 16;		//初始大小为16
 private RunnableScheduledFuture<?>[] queue =
 	new RunnableScheduledFuture<?>[INITIAL_CAPACITY];
 private final ReentrantLock lock = new ReentrantLock();	
@@ -173,6 +231,19 @@ public boolean offer(Runnable x) {
     }
     return true;
 }
+```
+
+队列扩容：
+
+```
+        //每次grow 50%, heap的最大值为Integer.MAX_VALUE
+        private void grow() {
+            int oldCapacity = queue.length;
+            int newCapacity = oldCapacity + (oldCapacity >> 1); // grow 50%
+            if (newCapacity < 0) // overflow
+                newCapacity = Integer.MAX_VALUE;
+            queue = Arrays.copyOf(queue, newCapacity);
+        }
 ```
 
 ```
