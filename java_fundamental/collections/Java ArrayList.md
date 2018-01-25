@@ -233,8 +233,7 @@ private void fastRemove(int index) {
 protected void removeRange(int fromIndex, int toIndex) {
         modCount++;
         int numMoved = size - toIndex;
-        System
-                .arraycopy(elementData, toIndex, elementData, fromIndex,
+        System.arraycopy(elementData, toIndex, elementData, fromIndex,
                         numMoved);
 
         // Let gc do its work
