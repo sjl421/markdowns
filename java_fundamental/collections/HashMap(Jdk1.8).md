@@ -162,7 +162,7 @@ public HashMap(Map<!--? extends K, ? extends V--> m) {
     
     final Node<K,V> getNode(int hash, Object key) {
         Node<K,V>[] tab; Node<K,V> first, e; int n; K k;
-        /*找到插入的第一个Node，方法是hash值和n-1相与，tab[(n - 1) & hash]*/
+        /*找到插入的第一个Node，方法是hash值和n-1相与，这种方式相当于取模，tab[(n - 1) & hash]*/
         //也就是说在一条链上的hash值相同的
         if ((tab = table) != null && (n = tab.length) > 0 &&
             (first = tab[(n - 1) & hash]) != null) {
@@ -229,7 +229,7 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
                     if ((e = p.next) == null) {  
                         p.next = newNode(hash, key, value, null);  
                //如果冲突的节点数已经达到8个，看是否需要改变冲突节点的存储结构，　　　　　　　　　　　　　  
-　　　　　　　　　　　　//treeifyBin首先判断当前hashMap的长度，如果不足64，只进行  
+　　　　　　　　　　　　//treeifyBin首先判断当前hashMap的容量，如果不足64，只进行  
                         //resize，扩容table，如果达到64，那么将冲突的存储结构为红黑树  
                         if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st  
                             treeifyBin(tab, hash);  
@@ -259,19 +259,23 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
     }  
 ```
 
+**treeifyBin**
+
+1. 先根据hash值索引到tab中指定的列；
+2. 将该list中的所有Node类型的节点元素转换成TreeNode类型的元素，形式还是List；
+3. TreeNode组成的List重构城红黑树；
+
 ```
-   /**
-     * Replaces all linked nodes in bin at index for given hash unless
-     * table is too small, in which case resizes instead.
-     */
     final void treeifyBin(Node<K,V>[] tab, int hash) {
         int n, index; Node<K,V> e;
         if (tab == null || (n = tab.length) < MIN_TREEIFY_CAPACITY)
             //如果table的容量 < 64，则只进行resize()
             resize();
+        //根据hash值定位到指定的某列
         else if ((e = tab[index = (n - 1) & hash]) != null) {
             TreeNode<K,V> hd = null, tl = null;
             do {
+                //将tab中的该list中的Node类型的元素用TreeNode替换
                 TreeNode<K,V> p = replacementTreeNode(e, null);
                 if (tl == null)
                     hd = p;
@@ -282,8 +286,151 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
                 tl = p;
             } while ((e = e.next) != null);
             if ((tab[index] = hd) != null)
+            	//生成红黑树
                 hd.treeify(tab);
         }
+    }
+```
+
+**treeify**
+
+```
+        /**
+         * Forms tree of the nodes linked from this node.
+         * @return root of tree
+         */
+        final void treeify(Node<K,V>[] tab) {
+            TreeNode<K,V> root = null;
+            for (TreeNode<K,V> x = this, next; x != null; x = next) {
+                next = (TreeNode<K,V>)x.next;
+                x.left = x.right = null;
+                if (root == null) {
+                    x.parent = null;
+                    x.red = false;
+                    root = x;
+                }
+                else {
+                    K k = x.key;
+                    int h = x.hash;
+                    Class<?> kc = null;
+                    for (TreeNode<K,V> p = root;;) {
+                        int dir, ph;
+                        K pk = p.key;
+                        if ((ph = p.hash) > h)
+                            dir = -1;
+                        else if (ph < h)
+                            dir = 1;
+                        else if ((kc == null &&
+                                  (kc = comparableClassFor(k)) == null) ||
+                                 (dir = compareComparables(kc, k, pk)) == 0)
+                            dir = tieBreakOrder(k, pk);
+
+                        TreeNode<K,V> xp = p;
+                        if ((p = (dir <= 0) ? p.left : p.right) == null) {
+                            x.parent = xp;
+                            if (dir <= 0)
+                                xp.left = x;
+                            else
+                                xp.right = x;
+                            root = balanceInsertion(root, x);
+                            break;
+                        }
+                    }
+                }
+            }
+            moveRootToFront(tab, root);
+        }
+```
+
+**resize()**
+
+```
+    /**
+     * Initializes or doubles table size.  If null, allocates in
+     * accord with initial capacity target held in field threshold.
+     * Otherwise, because we are using power-of-two expansion, the
+     * elements from each bin must either stay at same index, or move
+     * with a power of two offset in the new table.
+     *
+     * @return the table
+     */
+    /**
+     *初始化或者将size扩至2倍大小。如果满了，就分配符合初始容量目标下的门阀值
+     *否则，因为我们是进行2的幂的扩展操作，每个位桶处的数据要么呆在相同的索引处，要么移动
+     *处，要么移动2的幂的位移量。
+     */
+    final Node<K,V>[] resize() {
+        Node<K,V>[] oldTab = table;
+        int oldCap = (oldTab == null) ? 0 : oldTab.length;
+        int oldThr = threshold;
+        int newCap, newThr = 0;
+        if (oldCap > 0) {
+            if (oldCap >= MAXIMUM_CAPACITY) {
+                threshold = Integer.MAX_VALUE;//超过1>>30大小,无法扩容只能改变 阈值
+                return oldTab;
+            }
+            else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY &&
+                     oldCap >= DEFAULT_INITIAL_CAPACITY)
+                newThr = oldThr << 1; // double threshold     //门限值*2
+        }
+        else if (oldThr > 0) // initial capacity was placed in threshold 
+            newCap = oldThr;
+        else {               // zero initial threshold signifies using defaults   初始化操作
+            newCap = DEFAULT_INITIAL_CAPACITY;
+            newThr = (int)(DEFAULT_LOAD_FACTOR * DEFAULT_INITIAL_CAPACITY);
+        }
+        if (newThr == 0) {
+            float ft = (float)newCap * loadFactor;
+            newThr = (newCap < MAXIMUM_CAPACITY && ft < (float)MAXIMUM_CAPACITY ?
+                      (int)ft : Integer.MAX_VALUE);
+        }
+        threshold = newThr;
+        @SuppressWarnings({"rawtypes","unchecked"})
+            Node<K,V>[] newTab = (Node<K,V>[])new Node[newCap];//table在这里产生了。
+        table = newTab;//下面对原table中已存储的数据进行迁移，分树和链表2种情况处理
+        if (oldTab != null) {
+            for (int j = 0; j < oldCap; ++j) {
+                Node<K,V> e;
+                if ((e = oldTab[j]) != null) {
+                    oldTab[j] = null;
+                    if (e.next == null)
+                        newTab[e.hash & (newCap - 1)] = e;//将单节点移动到新位置
+                    else if (e instanceof TreeNode)         //下面是分开2种情况操作，一种是发生碰撞的节点以树结构进行存储，另一种是以链表结构存储
+                        ((TreeNode<K,V>)e).split(this, newTab, j, oldCap);//这里是处理树的情况
+                    else { // preserve order 保持顺序
+                        Node<K,V> loHead = null, loTail = null;
+                        Node<K,V> hiHead = null, hiTail = null;
+                        Node<K,V> next;
+                        do {
+                            next = e.next;
+                            if ((e.hash & oldCap) == 0) {//根据hash值与oldCap的运算结果，将链表中集结的元素分开
+                                if (loTail == null)     //运算结果为0的元素，用lo记录并连接成新的链表
+                                    loHead = e;
+                                else
+                                    loTail.next = e;
+                                loTail = e;
+                            }
+                            else {                      //运算结果不为0的数据，
+                                if (hiTail == null)         //用li记录
+                                    hiHead = e;
+                                else
+                                    hiTail.next = e;
+                                hiTail = e;
+                            }
+                        } while ((e = next) != null);
+                        if (loTail != null) {
+                            loTail.next = null;
+                            newTab[j] = loHead; //lo仍然放在“原处”，这个“原处”是根据新的hash值算出来的。
+                        }
+                        if (hiTail != null) {
+                            hiTail.next = null;
+                            newTab[j + oldCap] = hiHead;//li放在j+oldCap位置
+                        }
+                    }
+                }
+            }
+        }
+        return newTab;
     }
 ```
 
