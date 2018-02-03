@@ -131,12 +131,23 @@ static class Node<K,V> implements Map.Entry<K,V> {
 
 这个类并不负责包装用户的key、value信息，而是包装的很多TreeNode节点。它代替了TreeNode的根节点，也就是说在实际的ConcurrentHashMap“数组”中，存放的是TreeBin对象，而不是TreeNode对象，这是与HashMap的区别。另外这个类还带有了读写锁。
 
-这里仅贴出它的构造方法。可以看到在构造TreeBin节点时，仅仅指定了它的hash值为TREEBIN常量，这也就是个标识为。同时也看到我们熟悉的红黑树构造方法
+这里仅贴出它的构造方法。可以看到在构造TreeBin节点时，仅仅指定了它的hash值为TREEBIN常量，这也就是个标识位。同时也看到我们熟悉的红黑树构造方法
 
 ```
-/** 
+		//内部成员变量
+		TreeNode<K,V> root;
+        volatile TreeNode<K,V> first;
+        volatile Thread waiter;
+        
+        volatile int lockState;		//用来实现read-write lock
+        // values for lockState
+        static final int WRITER = 1; // set while holding write lock
+        static final int WAITER = 2; // set when waiting for write lock
+        static final int READER = 4; // increment value for setting read lock
+		
+		/** 
          * Creates bin with initial set of nodes headed by b. 
-         */  
+         */ 
         TreeBin(TreeNode<K,V> b) {  
             super(TREEBIN, null, null, null);  
             this.first = b;  
@@ -189,7 +200,7 @@ static class Node<K,V> implements Map.Entry<K,V> {
 一个用于连接两个table的节点类。它包含一个nextTable指针，用于指向下一张表。而且这个节点的key value next指针全部为null，它的hash值为-1. 这里面定义的find的方法是从nextTable里进行查询节点，而不是以自身为头节点进行查找
 
 ```
-/** 
+	/** 
      * A node inserted at head of bins during transfer operations. 
      */  
     static final class ForwardingNode<K,V> extends Node<K,V> {  
@@ -312,8 +323,9 @@ ConcurrentHashMap定义了三个原子操作，用于对指定位置的节点进
         while ((tab = table) == null || tab.length == 0) {  
                 //sizeCtl表示有其他线程正在进行初始化操作，把线程挂起。对于table的初始化工作，只能有一个线程在进行。  
             if ((sc = sizeCtl) < 0)  
+            //在这里表示已经有一个线程正在进行初始化操作了
                 Thread.yield(); // lost initialization race; just spin  
-            else if (U.compareAndSwapInt(this, SIZECTL, sc, -1)) {//利用CAS方法把sizectl的值置为-1 表示本线程正在进行初始化  
+            else if (U.compareAndSwapInt(this, SIZECTL, sc, -1)) {//利用CAS方法把sizectl的值置为-1 表示本线程正在进行初始化，将seizeCtl设成-1，表示正在初始化
                 try {  
                     if ((tab = table) == null || tab.length == 0) {  
                         int n = (sc > 0) ? sc : DEFAULT_CAPACITY;  
@@ -338,9 +350,7 @@ ConcurrentHashMap定义了三个原子操作，用于对指定位置的节点进
 
 整个扩容操作分为两个部分
 
-- ​
-
-   第一部分是构建一个nextTable,它的容量是原来的两倍，这个操作是单线程完成的。这个单线程的保证是通过RESIZE_STAMP_SHIFT这个常量经过一次运算来保证的，这个地方在后面会有提到；
+- 第一部分是构建一个nextTable,它的容量是原来的两倍，这个操作是单线程完成的。这个单线程的保证是通过RESIZE_STAMP_SHIFT这个常量经过一次运算来保证的，这个地方在后面会有提到；
 
 - 第二个部分就是将原来table中的元素复制到nextTable中，这里允许多线程进行操作。
 
@@ -532,9 +542,7 @@ ConcurrentHashMap定义了三个原子操作，用于对指定位置的节点进
 
 前面的所有的介绍其实都为这个方法做铺垫。ConcurrentHashMap最常用的就是put和get两个方法。现在来介绍put方法，这个put方法依然沿用HashMap的put方法的思想，根据hash值计算这个新插入的点在table中的位置i，如果i位置是空的，直接放进去，否则进行判断，如果i位置是树节点，按照树的方式插入新的节点，否则把i插入到链表的末尾。ConcurrentHashMap中依然沿用这个思想，有一个最重要的不同点就是ConcurrentHashMap不允许key或value为null值。另外由于涉及到多线程，put方法就要复杂一点。在多线程中可能有以下两个情况
 
-1. ​
-
-   如果一个或多个线程正在对ConcurrentHashMap进行扩容操作，当前线程也要进入扩容的操作中。这个扩容的操作之所以能被检测到，是因为transfer方法中在空结点上插入forward节点，如果检测到需要插入的位置被forward节点占有，就帮助进行扩容；
+1. 如果一个或多个线程正在对ConcurrentHashMap进行扩容操作，当前线程也要进入扩容的操作中。这个扩容的操作之所以能被检测到，是因为transfer方法中在空结点上插入forward节点，如果检测到需要插入的位置被forward节点占有，就帮助进行扩容；
 
 2. 如果检测到要插入的节点是非空且不是forward节点，就对这个节点加锁，这样就保证了线程安全。尽管这个有一些影响效率，但是还是会比hashTable的synchronized要好得多。
 

@@ -170,7 +170,49 @@ protected transient int modCount = 0;
 ```
 
 ```
-    public boolean add(E paramE) {        ensureCapacityInternal(this.size + 1);        /** 省略此处代码 */    }    private void ensureCapacityInternal(int paramInt) {        if (this.elementData == EMPTY_ELEMENTDATA)            paramInt = Math.max(10, paramInt);        ensureExplicitCapacity(paramInt);    }        private void ensureExplicitCapacity(int paramInt) {        this.modCount += 1;    //修改modCount        /** 省略此处代码 */    }       public boolean remove(Object paramObject) {        int i;        if (paramObject == null)            for (i = 0; i < this.size; ++i) {                if (this.elementData[i] != null)                    continue;                fastRemove(i);                return true;            }        else            for (i = 0; i < this.size; ++i) {                if (!(paramObject.equals(this.elementData[i])))                    continue;                fastRemove(i);                return true;            }        return false;    }    private void fastRemove(int paramInt) {        this.modCount += 1;   //修改modCount        /** 省略此处代码 */    }    public void clear() {        this.modCount += 1;    //修改modCount        /** 省略此处代码 */    }
+public boolean add(E paramE) {
+    ensureCapacityInternal(this.size + 1);        
+    /** 省略此处代码 */    
+}
+
+private void ensureCapacityInternal(int paramInt) {
+	if (this.elementData == EMPTY_ELEMENTDATA)
+    	paramInt = Math.max(10, paramInt);
+    ensureExplicitCapacity(paramInt);    
+}        
+private void ensureExplicitCapacity(int paramInt) {
+	this.modCount += 1;    //修改modCount        
+	/** 省略此处代码 */    
+}       
+
+public boolean remove(Object paramObject) {        
+	int i;        
+	if (paramObject == null)            
+		for (i = 0; i < this.size; ++i) {
+        	if (this.elementData[i] != null)
+            continue;
+            fastRemove(i);
+            return true;            
+    }
+    else
+    	for (i = 0; i < this.size; ++i) {
+        	if (!(paramObject.equals(this.elementData[i])))
+            	continue;
+            fastRemove(i);
+            return true;
+   		}
+   return false;    
+}    
+
+private void fastRemove(int paramInt) {
+	this.modCount += 1;   //修改modCount
+    /** 省略此处代码 */    
+}    
+
+public void clear() {
+	this.modCount += 1;    //修改modCount
+    /** 省略此处代码 */    
+}
 ```
 
 从上面的源代码我们可以看出，ArrayList中无论add、remove、clear方法只要是涉及了改变ArrayList元素的个数的方法都会导致modCount的改变。所以我们这里可以初步判断由于expectedModCount 得值与modCount的改变不同步，导致两者之间不等从而产生fail-fast机制。知道产生fail-fast产生的根本原因了，我们可以有如下场景：
@@ -194,7 +236,15 @@ CopyOnWriteArrayList为何物？ArrayList 的一个线程安全的变体，其�
 第二、CopyOnWriterArrayList根本就不会产生ConcurrentModificationException异常，也就是它使用迭代器完全不会产生fail-fast机制。请看：
 
 ```
-private static class COWIterator<E> implements ListIterator<E> {        /** 省略此处代码 */        public E next() {            if (!(hasNext()))                throw new NoSuchElementException();            return this.snapshot[(this.cursor++)];        }        /** 省略此处代码 */    }
+private static class COWIterator<E> implements ListIterator<E> {
+	/** 省略此处代码 */
+    public E next() {
+        if (!(hasNext()))
+            throw new NoSuchElementException();
+            return this.snapshot[(this.cursor++)];        
+	}
+    /** 省略此处代码 */    
+}
 ```
 
 CopyOnWriterArrayList的方法根本就没有像ArrayList中使用checkForComodification方法来判断expectedModCount 与 modCount 是否相等。它为什么会这么做，凭什么可以这么做呢？我们以add方法为例：
