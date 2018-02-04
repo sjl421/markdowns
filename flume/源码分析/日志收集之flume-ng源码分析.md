@@ -26,7 +26,9 @@
 
   channel：
 
-​         channel中实现了memorychannel；memory channel不提供数据可靠性，当agent down掉后，memory channel queue中的数据会丢失；在数据可靠性要求不高的情况下，可以使用。该目录下实现了重要的component：ChannelProcessor和ChannelSelector。对source暴露的可调用接口由ChannelProcessor的processEvent和processEventBatch完成。在ChannelProcessor处理前，会调用interceptor将一些用户配置的interceptor 对应meta信息（HOST\TIMESTAMP\STATIC\UUID等）放入到Event的header中。而ChannelSelector提供了两种实现：replicating和multiplexing：
+​         channel中实现了memorychannel；memory channel不提供数据可靠性，当agent down掉后，memory channel queue中的数据会丢失；在数据可靠性要求不高的情况下，可以使用。
+
+​	该目录下实现了重要的component：ChannelProcessor和ChannelSelector。对source暴露的可调用接口由ChannelProcessor的processEvent和processEventBatch完成。在ChannelProcessor处理前，会调用interceptor将一些用户配置的interceptor 对应meta信息（HOST\TIMESTAMP\STATIC\UUID等）放入到Event的header中。而ChannelSelector提供了两种实现：replicating和multiplexing：
 
 replicating：将数据从source复制到多个channel中，每个channel有一份source的数据；
 
@@ -34,13 +36,11 @@ multiplexing：将数据根据配置的规则，将不同的消息路由到不�
 
   sink：
 
-​         sink中实现了诸如：LoggerSink、NullSink、ThriftSink、AvroSink和RollingFileSink等。sink中出去最后的sink各种实现外，比较重要的几个component包括SinkGroup、SinkProcessor。其中SinkGroup表示可以将多个Sink组合到一起作为一个group，而group内的多个sink的工作行为由不同的sinkprocessor来控制，默认提供了三种SinkProcessor：
+​         sink中实现了诸如：LoggerSink、NullSink、ThriftSink、AvroSink和RollingFileSink等。sink中除去最后的sink各种实现外，比较重要的几个component包括SinkGroup、SinkProcessor。其中SinkGroup表示可以将多个Sink组合到一起作为一个group，而group内的多个sink的工作行为由不同的sinkprocessor来控制，默认提供了三种SinkProcessor：
 
-​                            DefaultSinkProcessor：不配置processor时使用这种模式，此时SinkProcessor内部仅包含一个sink，无sinkgroup的概念；
-
-​                            FailOverSinkProcessor： 多个sink形成一个sinkgroup，group中只有一个sink出于active，消息由active的sink消费；配置多个sink时，需要配置每个sink的 priority，默认选用sink最高且可用的sink作为active sink；
-
-​                           LoadBalanceSinkProcessor：多个sink形成一个group，每次消费数据时，由OrderSelector选择某一个sink来消费数据，selector提供两种机制：random、round_robin。
+* DefaultSinkProcessor：不配置processor时使用这种模式，此时SinkProcessor内部仅包含一个sink，无sinkgroup的概念；
+* FailOverSinkProcessor： 多个sink形成一个sinkgroup，group中只有一个sink出于active，消息由active的sink消费；配置多个sink时，需要配置每个sink的 priority，默认选用sink最高且可用的sink作为active sink；
+* LoadBalanceSinkProcessor：多个sink形成一个group，每次消费数据时，由OrderSelector选择某一个sink来消费数据，selector提供两种机制：random、round_robin。
 
    Source：
 
@@ -62,25 +62,23 @@ multiplexing：将数据根据配置的规则，将不同的消息路由到不�
 
 ​    这三者的关系为：
 
-**Source**：  source负责产生数据，将数据“传入”到channel，一旦写入channel成功，source就认为数据已经可靠的传输。
+**Source**：source负责产生数据，将数据“传入”到channel，一旦写入channel成功，source就认为数据已经可靠的传输。
 
-**Sink**：    sink不停的从属于自己的channel（此处有点类似于消息队列的消费者了）中获取数据，并且将数据写入到相应的后端中，如果数据写入失败则需要将相应的状况通知channel，让channel知道数据传输失败，下次获取时可以继续获取到这些数据；
+**Sink**：sink不停的从属于自己的channel（此处有点类似于消息队列的消费者了）中获取数据，并且将数据写入到相应的后端中，如果数据写入失败则需要将相应的状况通知channel，让channel知道数据传输失败，下次获取时可以继续获取到这些数据；
 
-**Channel**： 在flume的架构中，channel负责对数据提供可靠性保证。任何一种channel（memory，file，jdbc）都需要提供相应channel的transaction，保证实现如下几个操作：
+**Channel**：在flume的架构中，channel负责对数据提供可靠性保证。任何一种channel（memory，file，jdbc）都需要提供相应channel的transaction，保证实现如下几个操作：
 
-​         doBegin：        事务开始；在source准备写入数据或sink准备读取数据之前调用；
+​         doBegin：事务开始；在source准备写入数据或sink准备读取数据之前调用；
 
-​         doPut：                      数据写入（生产者）；由channelprocessor的processEvent或processEventBatch调用（rootcaller实际上是各种各样的source）；
+​         doPut：数据写入（生产者）；由channelprocessor的processEvent或processEventBatch调用（rootcaller实际上是各种各样的source）；
 
-​         doTake：                   数据读出（消费者）；消费端（sink）调用，然后将数据做后端存储或转发处理；
+​         doTake：数据读出（消费者）；消费端（sink）调用，然后将数据做后端存储或转发处理；
 
-​         doCommit:       数据操作（写入或读出消费）成功；
+​         doCommit：数据操作（写入或读出消费）成功；
 
-​         doRollback：   数据操作（写入或读出消费）失败，回滚；
+​         doRollback：数据操作（写入或读出消费）失败，回滚；
 
-​         doClose：        关闭事务；
-
- 
+​         doClose：关闭事务； 
 
   三者之间简单的调用关系如下图：
 
