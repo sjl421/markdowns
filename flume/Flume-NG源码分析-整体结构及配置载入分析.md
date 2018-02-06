@@ -16,7 +16,7 @@
 
   里面主要包含了filechannel， jdbcchannel，kafakachannel，memorychannel通道的实现
 
-* flume-ng-clients
+* flume-ng-clientsr
 
   实现了几个log4j相关的几个Appender，是的log4j的日志输出可以直接发送给flume-agent；其中有一个LoadBalanccingLog4jAppender的实现，提供了多个flume-agent的load balance 和 ha功能，采用 flume作为日志收集的可以考虑将这Appender引入内部的log4j中。
 

@@ -1,8 +1,12 @@
+---
+typora-root-url: ../../../pics
+---
+
 # flume-ng-configuration
 
 该model主要提供了flume的配置类
 
-
+![flume-configuration](/flume/flume-configuration.png)
 
 ## ComponentConfigurationFactory
 
@@ -28,10 +32,6 @@ ComponentType：包含：
 	LOGGER，FILE_ROLL,HDFS,IRC,AVRO等类型
 通过flume的项目主页上的介绍可以看到，flume的source，sink和channel都有很多具体的细分类型；
 ```
-
-
-
-
 
 ## FlumeConfiguration 
 
