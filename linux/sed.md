@@ -180,3 +180,18 @@ sed -n '1,/^TS/d' message
 ```
 /^TS/,/^TE/{s/CN/China/ s/Beijing/BJ/} 
 ```
+####删除匹配行后的几行
+
+该模式也会将匹配行一并删除掉
+
+```
+sed '/Storage/,+2d' thegeekstuff.txt 
+```
+
+
+
+```
+sed -r 's/.*MYSTRING.*/PROJ_NAME="hello_world"/'
+sed -i 's/ETCD_ADVERTISE_CLIENT_URLS.*/ETCD_ADVERTISE_CLIENT_URLS=https:\/\/127.0.0.1:4379'
+```
+
