@@ -4,7 +4,7 @@
 
 * channel processor  暴露出了向channel中put Event的操作;
 * channel Processor的主要功能时间event(单个的event)/events(list, 批量的操作)放入到对应的channel中,其中channel 可分为required channel 和 optional channel,
-*  为了区分 required channel 和 optional channel, channel processor中还实例化了channel selector来确定那些channel是必选的,哪些channel是可选的;
+* 为了区分 required channel 和 optional channel, channel processor中还实例化了channel selector来确定那些channel是必选的,哪些channel是可选的;
 * channel processor 实例化了interceptorChain, channelProcessor的操作中有对interceptorChain的基本操作操作;
 
 ### 配置InterceptorChain
