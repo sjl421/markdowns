@@ -184,4 +184,3 @@ Full GC / Major GC（老年代GC）指发生在老年代的GC，出现了Major G
 在JDK6之后：
 
 ​	只要老年代中连续空间大于新生代对象总大小或者历次晋升的平均大小就会进行Minor GC，否则就是Full GC；
-
